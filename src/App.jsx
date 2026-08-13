@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer
 } from "lucide-react";
 
 /* =========================================================
@@ -895,7 +895,18 @@ function StudioCRM({ onLogout }) {
   const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["billing", "收費總覽", DollarSign]];
 
   return (
-    <div style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100%", color: "#2E2A22", padding: 20 }}>
+    <>
+      <style>{`
+        .print-calendar { display: none; }
+        @media print {
+          body * { visibility: hidden; }
+          .print-calendar, .print-calendar * { visibility: visible; }
+          .print-calendar { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+          .app-screen-view { display: none !important; }
+          @page { size: A4 landscape; margin: 12mm; }
+        }
+      `}</style>
+      <div className="app-screen-view" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100%", color: "#2E2A22", padding: 20 }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
           <div>
@@ -935,6 +946,9 @@ function StudioCRM({ onLogout }) {
                 <button style={btnGhost} onClick={() => setMonth(new Date(year, mon - 1, 1))}><ChevronLeft size={16} /></button>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{year} 年 {mon + 1} 月</div>
                 <button style={btnGhost} onClick={() => setMonth(new Date(year, mon + 1, 1))}><ChevronRight size={16} /></button>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+                <button style={btnGhost} onClick={() => window.print()}><Printer size={14} />列印本月課表（A4）</button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6, marginBottom: 6 }}>
                 {WEEKDAYS.map((w) => <div key={w} style={{ textAlign: "center", fontSize: 12, color: "#9A9284", fontWeight: 600 }}>{w}</div>)}
@@ -1242,6 +1256,41 @@ function StudioCRM({ onLogout }) {
           <RecurringTemplateForm initial={templateModal === "new" ? null : templateModal} families={families} onSave={saveTemplate} onCancel={() => setTemplateModal(null)} />
         </Modal>
       )}
-    </div>
+      </div>
+
+      <div className="print-calendar" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", padding: 10, color: "#1a1a1a" }}>
+        <h2 style={{ textAlign: "center", margin: "0 0 12px", fontSize: 20 }}>{year} 年 {mon + 1} 月課表</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <thead>
+            <tr>
+              {WEEKDAYS.map((w) => (
+                <th key={w} style={{ border: "1px solid #999", padding: "4px 2px", fontSize: 11, background: "#eee" }}>{w}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: Math.ceil(cells.length / 7) }).map((_, rowIdx) => (
+              <tr key={rowIdx}>
+                {cells.slice(rowIdx * 7, rowIdx * 7 + 7).map((d, colIdx) => {
+                  if (!d) return <td key={colIdx} style={{ border: "1px solid #ccc", height: 90, verticalAlign: "top" }} />;
+                  const ds = toDateStr(d);
+                  const items = getDaySessions(ds);
+                  return (
+                    <td key={colIdx} style={{ border: "1px solid #ccc", height: 90, verticalAlign: "top", padding: 3, fontSize: 8.5 }}>
+                      <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 2 }}>{d.getDate()}</div>
+                      {items.map((it) => (
+                        <div key={it.id} style={{ lineHeight: 1.25, marginBottom: 1, overflow: "hidden" }}>
+                          {it.startTime} {it.courseType || ""}{it.attendees.length ? `｜${it.attendees.map((a) => memberNameOnly(a)).join("、")}` : ""}
+                        </div>
+                      ))}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
