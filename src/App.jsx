@@ -1261,6 +1261,10 @@ function StudioCRM({ onLogout }) {
       <div className="print-calendar" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", padding: 10, color: "#1a1a1a" }}>
         <h2 style={{ textAlign: "center", margin: "0 0 12px", fontSize: 20 }}>{year} 年 {mon + 1} 月課表</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "4%" }} />
+            {Array.from({ length: 6 }).map((_, i) => <col key={i} style={{ width: "16%" }} />)}
+          </colgroup>
           <thead>
             <tr>
               {WEEKDAYS.map((w) => (
