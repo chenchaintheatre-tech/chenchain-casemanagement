@@ -952,7 +952,7 @@ function StudioCRM({ onLogout }) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
                 {WEEKDAYS.map((w) => (
-                  <div key={w} style={{ textAlign: "center", fontSize: 12, color: "#9A9284", fontWeight: 600, paddingBottom: 6 }}>{w}</div>
+                  <div key={w} style={{ textAlign: "left", paddingLeft: 8, fontSize: 12, color: "#9A9284", fontWeight: 600, paddingBottom: 6 }}>{w}</div>
                 ))}
                 {cells.map((d, i) => {
                   if (!d) return <div key={i} />;
