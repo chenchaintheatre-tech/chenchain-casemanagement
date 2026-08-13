@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut
 } from "lucide-react";
 
 /* =========================================================
@@ -606,7 +606,72 @@ function RecurringTemplateForm({ initial, families, onSave, onCancel }) {
 /* =========================================================
    主應用
 ========================================================= */
-export default function StudioCRM() {
+/* =========================================================
+   登入畫面
+========================================================= */
+function LoginScreen({ onLoggedIn }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (err) { setError("帳號或密碼錯誤，請再試一次"); return; }
+    onLoggedIn();
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <form onSubmit={submit} style={{ background: "#fff", borderRadius: 16, border: "1px solid #EDE6D6", padding: 32, width: "100%", maxWidth: 380, boxShadow: "0 12px 32px rgba(0,0,0,0.06)" }}>
+        <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#2E2A22" }}>工作室個案管理系統</h1>
+        <div style={{ fontSize: 13, color: "#9A9284", marginBottom: 24 }}>請登入以繼續</div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#5C5648", marginBottom: 6 }}>帳號（Email）</label>
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#5C5648", marginBottom: 6 }}>密碼</label>
+          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        {error && <div style={{ background: "#FDECEC", color: "#B4302A", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{error}</div>}
+        <button type="submit" disabled={loading}
+          style={{ width: "100%", border: "none", borderRadius: 9, padding: "11px 16px", fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer", background: "#B4694A", color: "#fff", opacity: loading ? 0.7 : 1 }}>
+          {loading ? "登入中…" : "登入"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* =========================================================
+   最外層：登入驗證
+========================================================= */
+export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = 檢查中, null = 未登入, object = 已登入
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return <div style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", padding: 40, color: "#9A9284" }}>載入中…</div>;
+  }
+  if (!session) {
+    return <LoginScreen onLoggedIn={() => {}} />;
+  }
+  return <StudioCRM onLogout={() => supabase.auth.signOut()} />;
+}
+
+function StudioCRM({ onLogout }) {
   const [families, setFamilies] = useState([]);
   const [slots, setSlots] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -854,6 +919,9 @@ export default function StudioCRM() {
                 <button key={key} onClick={() => setTab(key)} style={{ ...btnBase, background: tab === key ? "#B4694A" : "transparent", color: tab === key ? "#fff" : "#5C5648" }}><Icon size={15} />{label}</button>
               ))}
             </div>
+            <button style={btnDanger} onClick={onLogout} title="登出">
+              <LogOut size={15} />登出
+            </button>
           </div>
         </div>
 
