@@ -952,7 +952,7 @@ function StudioCRM({ onLogout }) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
                 {WEEKDAYS.map((w) => (
-                  <div key={w} style={{ textAlign: "left", paddingLeft: 8, fontSize: 12, color: "#9A9284", fontWeight: 600, paddingBottom: 6 }}>{w}</div>
+                  <div key={w} style={{ boxSizing: "border-box", textAlign: "left", paddingLeft: 8, fontSize: 12, color: "#9A9284", fontWeight: 600, paddingBottom: 6 }}>{w}</div>
                 ))}
                 {cells.map((d, i) => {
                   if (!d) return <div key={i} />;
@@ -962,7 +962,7 @@ function StudioCRM({ onLogout }) {
                   const isToday = ds === todayStr();
                   const conflictDate = items.some((it) => findConflicts(it, items).length > 0);
                   return (
-                    <button key={i} onClick={() => setSelectedDate(ds)} style={{ border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 92, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
+                    <div key={i} role="button" tabIndex={0} onClick={() => setSelectedDate(ds)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedDate(ds); }} style={{ boxSizing: "border-box", width: "100%", border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 92, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 12, fontWeight: isToday ? 800 : 600 }}>{d.getDate()}</span>
                         {conflictDate && <AlertTriangle size={11} color="#B4302A" />}
@@ -978,7 +978,7 @@ function StudioCRM({ onLogout }) {
                         );
                       })}
                       {items.length > 3 && <div style={{ fontSize: 9, color: "#9A9284" }}>+{items.length - 3} 更多</div>}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
