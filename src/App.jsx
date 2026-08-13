@@ -950,10 +950,10 @@ function StudioCRM({ onLogout }) {
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
                 <button style={btnGhost} onClick={() => window.print()}><Printer size={14} />列印本月課表（A4）</button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6, marginBottom: 6 }}>
-                {WEEKDAYS.map((w) => <div key={w} style={{ textAlign: "center", fontSize: 12, color: "#9A9284", fontWeight: 600 }}>{w}</div>)}
-              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
+                {WEEKDAYS.map((w) => (
+                  <div key={w} style={{ textAlign: "center", fontSize: 12, color: "#9A9284", fontWeight: 600, paddingBottom: 6 }}>{w}</div>
+                ))}
                 {cells.map((d, i) => {
                   if (!d) return <div key={i} />;
                   const ds = toDateStr(d);
