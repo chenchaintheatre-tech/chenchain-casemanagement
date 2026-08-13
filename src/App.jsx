@@ -188,10 +188,16 @@ function TopUpForm({ account, onAdd, onCancel }) {
   );
 }
 
-function StoredAccountsEditor({ family, onCreate, onTopUp }) {
+function StoredAccountsEditor({ family, onCreate, onTopUp, onDelete }) {
   const [topUpFor, setTopUpFor] = useState(null);
   const [newPrice, setNewPrice] = useState("");
   const accounts = family.storedAccounts || [];
+  const handleDelete = (acc) => {
+    if ((acc.remainingUnits ?? 0) > 0) {
+      if (!window.confirm(`此帳戶還有剩餘 ${acc.remainingUnits} 堂尚未使用，確定要刪除嗎？刪除後無法復原。`)) return;
+    }
+    onDelete(acc.id);
+  };
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -204,7 +210,10 @@ function StoredAccountsEditor({ family, onCreate, onTopUp }) {
             <div style={{ fontWeight: 700 }}>單堂 {money(acc.pricePerUnit)}</div>
             <div style={{ color: "#8A8272", fontSize: 12 }}>剩餘 {acc.remainingUnits ?? 0} 堂　累計儲值 {(acc.topUps || []).length} 筆</div>
           </div>
-          <button style={{ ...btnGhost, ...btnSm }} onClick={() => setTopUpFor(acc)}><Wallet size={12} />儲值</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button style={{ ...btnGhost, ...btnSm }} onClick={() => setTopUpFor(acc)}><Wallet size={12} />儲值</button>
+            <button style={{ ...btnDanger, ...btnSm }} onClick={() => handleDelete(acc)}><Trash2 size={12} /></button>
+          </div>
         </div>
       ))}
       <div style={{ display: "flex", gap: 8 }}>
@@ -232,6 +241,7 @@ function FamilyForm({ initial, onSave, onCancel }) {
 
   const createAccount = (pricePerUnit) => setStoredAccounts([...storedAccounts, { id: uid(), pricePerUnit, remainingUnits: 0, topUps: [] }]);
   const topUpAccount = (accId, rec) => setStoredAccounts(storedAccounts.map((a) => (a.id === accId ? { ...a, remainingUnits: (a.remainingUnits ?? 0) + rec.units, topUps: [...(a.topUps || []), rec] } : a)));
+  const deleteAccount = (accId) => setStoredAccounts(storedAccounts.filter((a) => a.id !== accId));
 
   const submit = () => {
     if (!familyName.trim()) return;
@@ -245,7 +255,7 @@ function FamilyForm({ initial, onSave, onCancel }) {
       <Field label="備註"><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder="選填" /></Field>
 
       <div style={{ marginTop: 16, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #EDE6D6" }}>
-        <StoredAccountsEditor family={{ storedAccounts }} onCreate={createAccount} onTopUp={topUpAccount} />
+        <StoredAccountsEditor family={{ storedAccounts }} onCreate={createAccount} onTopUp={topUpAccount} onDelete={deleteAccount} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
