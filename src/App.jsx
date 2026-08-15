@@ -28,6 +28,16 @@ const DURATIONS = [
 const durationByKey = (key) => DURATIONS.find((d) => d.key === key) || DURATIONS[1];
 // 團體課不論時長一律以「1堂」計算儲值堂數（60分鐘或80分鐘都算一堂）
 const effectiveUnits = (courseType, durationKey) => (courseType === "團體課" ? 1 : durationByKey(durationKey).unit);
+// 團體課收費設定只顯示 60分鐘／80分鐘，且都以「1堂」標示（不論實際60或80分鐘，都算一堂課）
+const durationsForCourseType = (courseType) => {
+  if (courseType === "團體課") {
+    return [
+      { key: "u1m60", unit: 1, minutes: 60, label: "1堂（60分鐘）" },
+      { key: "u15m80", unit: 1.5, minutes: 80, label: "1堂（80分鐘）" },
+    ];
+  }
+  return DURATIONS;
+};
 const emptyPrices = () => ({ u05m25: "", u05m30: "", u1m50: "", u1m60: "", u15m80: "" });
 
 const MODES = ["實體", "線上"];
@@ -133,7 +143,7 @@ function PlansEditor({ plans, onChange }) {
               <button style={{ ...btnDanger, ...btnSm }} onClick={() => removePlan(p.id)}><Trash2 size={12} /></button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {DURATIONS.map((d) => (
+              {durationsForCourseType(p.courseType).map((d) => (
                 <div key={d.key}>
                   <label style={{ fontSize: 11, color: "#8A8272" }}>{d.label}</label>
                   <input style={inputStyle} type="number" value={p.prices?.[d.key] ?? ""} onChange={(e) => updatePlan(p.id, { prices: { ...(p.prices || emptyPrices()), [d.key]: e.target.value } })} placeholder="NT$" />
