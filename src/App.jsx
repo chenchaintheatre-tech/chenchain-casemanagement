@@ -26,6 +26,8 @@ const DURATIONS = [
   { key: "u15m80", unit: 1.5, minutes: 80, label: "1.5堂（80分鐘）" },
 ];
 const durationByKey = (key) => DURATIONS.find((d) => d.key === key) || DURATIONS[1];
+// 團體課不論時長一律以「1堂」計算儲值堂數（60分鐘或80分鐘都算一堂）
+const effectiveUnits = (courseType, durationKey) => (courseType === "團體課" ? 1 : durationByKey(durationKey).unit);
 const emptyPrices = () => ({ u05m25: "", u05m30: "", u1m50: "", u1m60: "", u15m80: "" });
 
 const MODES = ["實體", "線上"];
@@ -366,12 +368,14 @@ function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
   const [storedAccountId, setStoredAccountId] = useState(attendee.storedAccountId || "");
   const duration = durationByKey(session.durationKey);
 
+  const effUnit = effectiveUnits(courseType, session.durationKey);
+
   const matchingAccounts = useMemo(() => {
     if (!family) return [];
     const feeNum = Number(fee) || 0;
-    const pricePerUnit = duration.unit ? feeNum / duration.unit : 0;
+    const pricePerUnit = effUnit ? feeNum / effUnit : 0;
     return (family.storedAccounts || []).map((a) => ({ ...a, matches: Math.abs(a.pricePerUnit - pricePerUnit) < 0.01 }));
-  }, [family, fee]); // eslint-disable-line
+  }, [family, fee, effUnit]); // eslint-disable-line
 
   const chosenAccount = matchingAccounts.find((a) => a.id === storedAccountId);
 
@@ -409,8 +413,8 @@ function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
               單堂 {money(a.pricePerUnit)}｜剩餘 {a.remainingUnits ?? 0} 堂 {a.matches ? "（價位相符）" : "（價位不同，請確認）"}
             </label>
           ))}
-          {chosenAccount && (chosenAccount.remainingUnits ?? 0) < duration.unit && attendee.attendance === "出席" && (
-            <div style={warnBox(true)}><AlertCircle size={14} />此帳戶剩餘堂數可能不足（{duration.unit} 堂）</div>
+          {chosenAccount && (chosenAccount.remainingUnits ?? 0) < effUnit && attendee.attendance === "出席" && (
+            <div style={warnBox(true)}><AlertCircle size={14} />此帳戶剩餘堂數可能不足（{effUnit} 堂）</div>
           )}
         </Field>
       )}
@@ -443,6 +447,8 @@ function AddAttendeeForm({ session, families, onAdd, onCancel }) {
   const member = members.find((m) => m.id === memberId);
   const plan = member?.plans.find((p) => p.id === planId);
   const duration = durationByKey(session.durationKey);
+  const effectiveCourseType = plan ? plan.courseType : (session.courseType || COURSE_TYPES[0].key);
+  const effUnit = effectiveUnits(effectiveCourseType, session.durationKey);
 
   useEffect(() => {
     if (plan) {
@@ -454,15 +460,15 @@ function AddAttendeeForm({ session, families, onAdd, onCancel }) {
   const matchingAccounts = useMemo(() => {
     if (!family) return [];
     const feeNum = Number(fee) || 0;
-    const pricePerUnit = duration.unit ? feeNum / duration.unit : 0;
+    const pricePerUnit = effUnit ? feeNum / effUnit : 0;
     return (family.storedAccounts || []).map((a) => ({ ...a, matches: Math.abs(a.pricePerUnit - pricePerUnit) < 0.01 }));
-  }, [family, fee]); // eslint-disable-line
+  }, [family, fee, effUnit]); // eslint-disable-line
 
   const chosenAccount = matchingAccounts.find((a) => a.id === storedAccountId);
 
   const submit = () => {
     if (!familyId || !memberId) return;
-    const courseType = plan ? plan.courseType : (session.courseType || COURSE_TYPES[0].key);
+    const courseType = effectiveCourseType;
     const base = { id: uid(), familyId, memberId, planId: planId || null, courseType, fee: Number(fee) || 0, paymentMode, attendance: null, deducted: false };
     if (paymentMode === "儲值") {
       if (!storedAccountId) return;
@@ -514,8 +520,8 @@ function AddAttendeeForm({ session, families, onAdd, onCancel }) {
               單堂 {money(a.pricePerUnit)}｜剩餘 {a.remainingUnits ?? 0} 堂 {a.matches ? "（價位相符）" : "（價位不同，請確認）"}
             </label>
           ))}
-          {chosenAccount && (chosenAccount.remainingUnits ?? 0) < duration.unit && (
-            <div style={warnBox(true)}><AlertCircle size={14} />此帳戶剩餘堂數可能不足（{duration.unit} 堂）。堂數會在標記「出席」後才扣除，先加入不會馬上扣款。</div>
+          {chosenAccount && (chosenAccount.remainingUnits ?? 0) < effUnit && (
+            <div style={warnBox(true)}><AlertCircle size={14} />此帳戶剩餘堂數可能不足（{effUnit} 堂）。堂數會在標記「出席」後才扣除，先加入不會馬上扣款。</div>
           )}
         </Field>
       )}
@@ -1036,7 +1042,7 @@ function StudioCRM({ onLogout }) {
 
   const deleteSession = (session) => {
     pushHistory();
-    session.attendees.forEach((a) => { if (a.deducted && a.storedAccountId) adjustStoredAccount(a.familyId, a.storedAccountId, durationByKey(session.durationKey).unit); });
+    session.attendees.forEach((a) => { if (a.deducted && a.storedAccountId) adjustStoredAccount(a.familyId, a.storedAccountId, effectiveUnits(a.courseType, session.durationKey)); });
     if (session.virtual) { addCancelledDate(session.templateId, session.date); }
     else { setSlots((prev) => prev.filter((s) => s.id !== session.id)); if (session.fromTemplateId) addCancelledDate(session.fromTemplateId, session.date); }
   };
@@ -1050,7 +1056,7 @@ function StudioCRM({ onLogout }) {
     pushHistory();
     const att = session.attendees.find((a) => a.id === attendeeId);
     withRealSession(session, (s) => ({ ...s, attendees: s.attendees.filter((a) => a.id !== attendeeId) }));
-    if (att && att.deducted && att.storedAccountId) adjustStoredAccount(att.familyId, att.storedAccountId, durationByKey(session.durationKey).unit);
+    if (att && att.deducted && att.storedAccountId) adjustStoredAccount(att.familyId, att.storedAccountId, effectiveUnits(att.courseType, session.durationKey));
   };
   const updateAttendeePayment = (session, attendeeId, patch) => { pushHistory(); withRealSession(session, (s) => ({ ...s, attendees: s.attendees.map((a) => (a.id === attendeeId ? { ...a, ...patch } : a)) })); };
 
@@ -1059,11 +1065,12 @@ function StudioCRM({ onLogout }) {
     pushHistory();
     const att = session.attendees.find((a) => a.id === attendeeId);
     if (!att) return;
-    const unit = durationByKey(session.durationKey).unit;
-    if (att.deducted && att.storedAccountId) adjustStoredAccount(att.familyId, att.storedAccountId, unit);
+    const oldUnit = effectiveUnits(att.courseType, session.durationKey);
+    if (att.deducted && att.storedAccountId) adjustStoredAccount(att.familyId, att.storedAccountId, oldUnit);
     let deducted = false;
     if (patch.paymentMode === "儲值" && patch.storedAccountId && att.attendance === "出席") {
-      adjustStoredAccount(att.familyId, patch.storedAccountId, -unit);
+      const newUnit = effectiveUnits(patch.courseType || att.courseType, session.durationKey);
+      adjustStoredAccount(att.familyId, patch.storedAccountId, -newUnit);
       deducted = true;
     }
     const cleared = patch.paymentMode === "儲值" ? { paid: undefined, paidDate: undefined, method: undefined, last5: undefined, invoiced: undefined } : {};
@@ -1079,7 +1086,7 @@ function StudioCRM({ onLogout }) {
     const wasDeducted = !!att.deducted;
     const willDeduct = status === "出席" && att.paymentMode === "儲值" && !!att.storedAccountId;
     withRealSession(session, (s) => ({ ...s, attendees: s.attendees.map((a) => (a.id === attendeeId ? { ...a, attendance: status, deducted: willDeduct } : a)) }));
-    const unit = durationByKey(session.durationKey).unit;
+    const unit = effectiveUnits(att.courseType, session.durationKey);
     if (willDeduct && !wasDeducted) adjustStoredAccount(att.familyId, att.storedAccountId, -unit);
     else if (!willDeduct && wasDeducted) adjustStoredAccount(att.familyId, att.storedAccountId, unit);
   };
