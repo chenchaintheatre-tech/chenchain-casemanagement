@@ -339,6 +339,76 @@ function SlotTimeForm({ date, initial, conflictCandidates, onSave, onCancel }) {
 /* =========================================================
    新增上課者（登記家庭成員參與此時段，含收費與繳費紀錄）
 ========================================================= */
+/* =========================================================
+   編輯上課者內容（課程類型／費用／付款方式）
+========================================================= */
+function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
+  const member = family?.members.find((m) => m.id === attendee.memberId);
+  const [courseType, setCourseType] = useState(attendee.courseType || COURSE_TYPES[0].key);
+  const [fee, setFee] = useState(attendee.fee ?? 0);
+  const [paymentMode, setPaymentMode] = useState(attendee.paymentMode || "單次");
+  const [storedAccountId, setStoredAccountId] = useState(attendee.storedAccountId || "");
+  const duration = durationByKey(session.durationKey);
+
+  const matchingAccounts = useMemo(() => {
+    if (!family) return [];
+    const feeNum = Number(fee) || 0;
+    const pricePerUnit = duration.unit ? feeNum / duration.unit : 0;
+    return (family.storedAccounts || []).map((a) => ({ ...a, matches: Math.abs(a.pricePerUnit - pricePerUnit) < 0.01 }));
+  }, [family, fee]); // eslint-disable-line
+
+  const chosenAccount = matchingAccounts.find((a) => a.id === storedAccountId);
+
+  const submit = () => {
+    if (paymentMode === "儲值" && !storedAccountId) return;
+    onSave({
+      courseType,
+      fee: Number(fee) || 0,
+      paymentMode,
+      storedAccountId: paymentMode === "儲值" ? storedAccountId : null,
+    });
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: "#8A8272", marginBottom: 12 }}>上課者：{member?.name || "（已刪除）"}</div>
+      <Field label="課程類型">
+        <select style={inputStyle} value={courseType} onChange={(e) => setCourseType(e.target.value)}>
+          {COURSE_TYPES.map((c) => <option key={c.key} value={c.key}>{c.key}</option>)}
+        </select>
+      </Field>
+      <Field label="本次費用（NT$）"><input style={inputStyle} type="number" value={fee} onChange={(e) => setFee(e.target.value)} /></Field>
+      <Field label="繳費方式">
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={{ ...btnBase, flex: 1, justifyContent: "center", background: paymentMode === "單次" ? "#B4694A" : "#F2ECDE", color: paymentMode === "單次" ? "#fff" : "#5C5648" }} onClick={() => setPaymentMode("單次")}>單次繳費</button>
+          <button style={{ ...btnBase, flex: 1, justifyContent: "center", background: paymentMode === "儲值" ? "#B4694A" : "#F2ECDE", color: paymentMode === "儲值" ? "#fff" : "#5C5648" }} onClick={() => setPaymentMode("儲值")}>使用儲值</button>
+        </div>
+      </Field>
+      {paymentMode === "儲值" && family && (
+        <Field label="選擇儲值帳戶（單堂價格需相符，價位相同的課程可共用）">
+          {matchingAccounts.length === 0 && <div style={{ fontSize: 12, color: "#B4302A" }}>此家庭尚無儲值帳戶，請先至家庭管理新增。</div>}
+          {matchingAccounts.map((a) => (
+            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 6, padding: "6px 8px", borderRadius: 8, background: a.id === storedAccountId ? "#FBEFE7" : "#F7F5EF", cursor: "pointer" }}>
+              <input type="radio" name="editacc" checked={a.id === storedAccountId} onChange={() => setStoredAccountId(a.id)} />
+              單堂 {money(a.pricePerUnit)}｜剩餘 {a.remainingUnits ?? 0} 堂 {a.matches ? "（價位相符）" : "（價位不同，請確認）"}
+            </label>
+          ))}
+          {chosenAccount && (chosenAccount.remainingUnits ?? 0) < duration.unit && attendee.attendance === "出席" && (
+            <div style={warnBox(true)}><AlertCircle size={14} />此帳戶剩餘堂數可能不足（{duration.unit} 堂）</div>
+          )}
+        </Field>
+      )}
+      {attendee.deducted && (
+        <div style={warnBox(false)}><AlertCircle size={14} />此上課者原本已從儲值帳戶扣過堂數，若更改繳費方式或帳戶，系統會自動退回原帳戶，並依新設定重新處理。</div>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+        <button style={btnGhost} onClick={onCancel}>取消</button>
+        <button style={btnPrimary} onClick={submit}><Save size={14} />儲存</button>
+      </div>
+    </div>
+  );
+}
+
 function AddAttendeeForm({ session, families, onAdd, onCancel }) {
   const [familyId, setFamilyId] = useState("");
   const [memberId, setMemberId] = useState("");
@@ -693,6 +763,7 @@ function StudioCRM({ onLogout }) {
   const [slotTimeModal, setSlotTimeModal] = useState(null);
   const [attendeeModalSessionId, setAttendeeModalSessionId] = useState(null);
   const [paymentEdit, setPaymentEdit] = useState(null); // { session, attendee }
+  const [attendeeEdit, setAttendeeEdit] = useState(null); // { session, attendee }
   const [templateModal, setTemplateModal] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [history, setHistory] = useState([]);
@@ -859,6 +930,23 @@ function StudioCRM({ onLogout }) {
     if (att && att.deducted && att.storedAccountId) adjustStoredAccount(att.familyId, att.storedAccountId, durationByKey(session.durationKey).unit);
   };
   const updateAttendeePayment = (session, attendeeId, patch) => { pushHistory(); withRealSession(session, (s) => ({ ...s, attendees: s.attendees.map((a) => (a.id === attendeeId ? { ...a, ...patch } : a)) })); };
+
+  // 編輯上課者的課程類型／費用／繳費方式；若原本已扣過儲值堂數，先退回再依新設定重新處理
+  const updateAttendeeDetails = (session, attendeeId, patch) => {
+    pushHistory();
+    const att = session.attendees.find((a) => a.id === attendeeId);
+    if (!att) return;
+    const unit = durationByKey(session.durationKey).unit;
+    if (att.deducted && att.storedAccountId) adjustStoredAccount(att.familyId, att.storedAccountId, unit);
+    let deducted = false;
+    if (patch.paymentMode === "儲值" && patch.storedAccountId && att.attendance === "出席") {
+      adjustStoredAccount(att.familyId, patch.storedAccountId, -unit);
+      deducted = true;
+    }
+    const cleared = patch.paymentMode === "儲值" ? { paid: undefined, paidDate: undefined, method: undefined, last5: undefined, invoiced: undefined } : {};
+    withRealSession(session, (s) => ({ ...s, attendees: s.attendees.map((a) => (a.id === attendeeId ? { ...a, ...patch, ...cleared, deducted } : a)) }));
+    setAttendeeEdit(null);
+  };
 
   // 標記出席狀態；若為儲值付款，出席時自動扣堂，取消出席則自動退還
   const setAttendeeAttendance = (session, attendeeId, status) => {
@@ -1031,7 +1119,10 @@ function StudioCRM({ onLogout }) {
                         <div key={a.id} style={{ background: "#fff", borderRadius: 8, padding: "6px 8px", marginBottom: 5, fontSize: 12 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
                             <span>{memberLabel(a)}｜{a.courseType}｜{money(a.fee)}{a.paymentMode === "儲值" ? "（儲值）" : ""}</span>
-                            <button onClick={() => removeAttendee(session, a.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#B4302A" }}><X size={13} /></button>
+                            <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <button onClick={() => setAttendeeEdit({ session, attendee: a })} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#5C5648" }}><Edit3 size={12} /></button>
+                              <button onClick={() => removeAttendee(session, a.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#B4302A" }}><X size={13} /></button>
+                            </span>
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 4 }}>
                             <select
@@ -1260,6 +1351,18 @@ function StudioCRM({ onLogout }) {
         </Modal>
       )}
 
+      {attendeeEdit && (
+        <Modal title="編輯上課者內容" onClose={() => setAttendeeEdit(null)}>
+          <EditAttendeeForm
+            session={attendeeEdit.session}
+            attendee={attendeeEdit.attendee}
+            family={families.find((f) => f.id === attendeeEdit.attendee.familyId)}
+            onCancel={() => setAttendeeEdit(null)}
+            onSave={(patch) => updateAttendeeDetails(attendeeEdit.session, attendeeEdit.attendee.id, patch)}
+          />
+        </Modal>
+      )}
+
       {templateModal && (
         <Modal title={templateModal === "new" ? "新增固定課程" : "編輯固定課程"} onClose={() => setTemplateModal(null)} width={580}>
           <RecurringTemplateForm initial={templateModal === "new" ? null : templateModal} families={families} onSave={saveTemplate} onCancel={() => setTemplateModal(null)} />
@@ -1295,10 +1398,10 @@ function StudioCRM({ onLogout }) {
                       <td key={colIdx} style={{ border: "1px solid #ccc", height: printRowHeight, verticalAlign: "top", padding: 4, fontSize: 10.5, overflow: "hidden" }}>
                         <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 3 }}>{d.getDate()}</div>
                         {items.map((it) => (
-                          <div key={it.id} style={{ marginBottom: 3 }}>
-                            <div style={{ fontWeight: 700, lineHeight: 1.2 }}>{it.startTime}</div>
-                            <div style={{ lineHeight: 1.3, overflow: "hidden" }}>
-                              {it.courseType || ""}{it.attendees.length ? `｜${it.attendees.map((a) => memberNameOnly(a)).join("、")}` : ""}
+                          <div key={it.id} style={{ display: "flex", gap: 4, marginBottom: 3 }}>
+                            <div style={{ fontWeight: 700, lineHeight: 1.3, flexShrink: 0, width: 34 }}>{it.startTime}</div>
+                            <div style={{ lineHeight: 1.3, overflow: "hidden", flex: 1 }}>
+                              {it.attendees.map((a) => memberNameOnly(a)).join("、")}
                             </div>
                           </div>
                         ))}
