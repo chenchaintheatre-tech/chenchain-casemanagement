@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search
 } from "lucide-react";
 
 /* =========================================================
@@ -850,6 +850,25 @@ function StudioCRM({ onLogout }) {
   const [attendeeEdit, setAttendeeEdit] = useState(null); // { session, attendee }
   const [templateModal, setTemplateModal] = useState(null);
   const [vacationModal, setVacationModal] = useState(false);
+  const [familySearch, setFamilySearch] = useState("");
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const familyRefs = useRef({});
+
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const jumpToFamilySearch = () => {
+    const q = familySearch.trim();
+    if (!q) return;
+    const match = families.find((f) => f.familyName.includes(q) || f.members.some((m) => m.name.includes(q)));
+    if (match && familyRefs.current[match.id]) {
+      familyRefs.current[match.id].scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   const [saveError, setSaveError] = useState("");
   const [history, setHistory] = useState([]);
   const HISTORY_LIMIT = 20;
@@ -1449,14 +1468,27 @@ function StudioCRM({ onLogout }) {
         {/* ---------------- 家庭與學生 ---------------- */}
         {tab === "families" && (
           <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
               <div style={{ fontWeight: 700, fontSize: 15 }}>家庭列表（{families.length}）</div>
               <button style={btnPrimary} onClick={() => setFamilyModal("new")}><Plus size={14} />新增家庭</button>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
+                <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#B7B0A0" }} />
+                <input
+                  style={{ ...inputStyle, paddingLeft: 30 }}
+                  placeholder="搜尋家庭或學生姓名，按 Enter 跳轉"
+                  value={familySearch}
+                  onChange={(e) => setFamilySearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") jumpToFamilySearch(); }}
+                />
+              </div>
+              <button style={btnGhost} onClick={jumpToFamilySearch}>跳轉</button>
             </div>
             {families.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未新增家庭。</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {families.map((f) => (
-                <div key={f.id} style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 14 }}>
+                <div key={f.id} ref={(el) => (familyRefs.current[f.id] = el)} style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 14, scrollMarginTop: 20 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15 }}>{f.familyName}</div>
@@ -1691,6 +1723,16 @@ function StudioCRM({ onLogout }) {
         <Modal title="休假設定（不排課期間）" onClose={() => setVacationModal(false)} width={520}>
           <VacationForm vacations={vacations} onAdd={addVacation} onDelete={deleteVacation} />
         </Modal>
+      )}
+
+      {showBackToTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          title="回到頁首"
+          style={{ position: "fixed", bottom: 24, right: 24, zIndex: 200, width: 44, height: 44, borderRadius: "50%", border: "none", background: "#B4694A", color: "#fff", cursor: "pointer", boxShadow: "0 6px 16px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <ArrowUp size={20} />
+        </button>
       )}
       </div>
 
