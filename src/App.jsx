@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff
 } from "lucide-react";
 
 /* =========================================================
@@ -288,7 +288,7 @@ function FamilyForm({ initial, onSave, onCancel }) {
 /* =========================================================
    時段（單次）表單：時間 / 堂數 / 課別 / 實體或線上
 ========================================================= */
-function SlotTimeForm({ date, initial, conflictCandidates, onSave, onCancel }) {
+function SlotTimeForm({ date, initial, conflictCandidates, vacations, onSave, onCancel }) {
   const [startTime, setStartTime] = useState(initial?.startTime || "10:00");
   const [durationKey, setDurationKey] = useState(initial?.durationKey || "u1m50");
   const [courseType, setCourseType] = useState(initial?.courseType || "");
@@ -296,6 +296,15 @@ function SlotTimeForm({ date, initial, conflictCandidates, onSave, onCancel }) {
 
   const preview = { id: initial?.id || "__new__", startTime, durationKey };
   const conflicts = findConflicts(preview, conflictCandidates);
+  const dayVacation = (vacations || []).find((v) => {
+    if (date < v.startDate || date > v.endDate) return false;
+    if (v.allDay) return true;
+    const sMin = timeToMinutes(startTime);
+    const eMin = sMin + durationByKey(durationKey).minutes;
+    const vs = timeToMinutes(v.startTime || "00:00");
+    const ve = timeToMinutes(v.endTime || "23:59");
+    return sMin < ve && vs < eMin;
+  });
 
   const submit = () => onSave({ startTime, durationKey, courseType: courseType || null, mode });
 
@@ -323,6 +332,12 @@ function SlotTimeForm({ date, initial, conflictCandidates, onSave, onCancel }) {
           </select>
         </Field>
       </div>
+      {dayVacation && (
+        <div style={warnBox(true)}>
+          <CalendarOff size={14} style={{ marginTop: 1 }} />
+          <span>此時段落在休假期間（{dayVacation.startDate}～{dayVacation.endDate}{dayVacation.note ? `，${dayVacation.note}` : ""}），確定要排課請留意。</span>
+        </div>
+      )}
       {conflicts.length > 0 && (
         <div style={warnBox(true)}>
           <AlertTriangle size={14} style={{ marginTop: 1 }} />
@@ -598,6 +613,68 @@ function RecurringAttendeeRow({ row, families, onChange, onRemove }) {
   );
 }
 
+
+/* =========================================================
+   休假設定（不排課期間）
+========================================================= */
+function VacationForm({ vacations, onAdd, onDelete }) {
+  const [startDate, setStartDate] = useState(todayStr());
+  const [endDate, setEndDate] = useState(todayStr());
+  const [allDay, setAllDay] = useState(true);
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("18:00");
+  const [note, setNote] = useState("");
+
+  const submit = () => {
+    if (endDate < startDate) return;
+    onAdd({
+      startDate, endDate, allDay,
+      startTime: allDay ? null : startTime,
+      endTime: allDay ? null : endTime,
+      note: note.trim(),
+    });
+    setNote("");
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Field label="開始日期"><input style={inputStyle} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
+        <Field label="結束日期"><input style={inputStyle} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} min={startDate} /></Field>
+      </div>
+      {endDate < startDate && <div style={warnBox(true)}><AlertCircle size={14} />結束日期不可早於開始日期</div>}
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 10, cursor: "pointer" }}>
+        <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />整天休假（不限時段）
+      </label>
+      {!allDay && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <Field label="開始時間"><input style={inputStyle} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></Field>
+          <Field label="結束時間"><input style={inputStyle} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></Field>
+        </div>
+      )}
+      <Field label="備註（選填）"><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如：過年休假、老師請假" /></Field>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 18 }}>
+        <button style={btnPrimary} onClick={submit}><Plus size={14} />新增休假期間</button>
+      </div>
+
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, borderTop: "1px solid #EDE6D6", paddingTop: 14 }}>目前設定的休假期間</div>
+      {vacations.length === 0 && <div style={{ fontSize: 12, color: "#B7B0A0" }}>尚未設定任何休假期間</div>}
+      {vacations.map((v) => (
+        <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F3EEE0", borderRadius: 9, padding: "8px 12px", marginBottom: 8 }}>
+          <div style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: 700 }}>
+              {v.startDate}{v.endDate !== v.startDate ? `～${v.endDate}` : ""}
+              {v.allDay ? "（整天）" : `（${v.startTime}–${v.endTime}）`}
+            </div>
+            {v.note && <div style={{ color: "#8A8272", fontSize: 12 }}>{v.note}</div>}
+          </div>
+          <button style={{ ...btnDanger, ...btnSm }} onClick={() => onDelete(v.id)}><Trash2 size={12} /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RecurringTemplateForm({ initial, families, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || "");
   const [courseType, setCourseType] = useState(initial?.courseType || COURSE_TYPES[3].key);
@@ -756,6 +833,7 @@ function StudioCRM({ onLogout }) {
   const [families, setFamilies] = useState([]);
   const [slots, setSlots] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [vacations, setVacations] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("calendar");
   const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
@@ -771,12 +849,13 @@ function StudioCRM({ onLogout }) {
   const [paymentEdit, setPaymentEdit] = useState(null); // { session, attendee }
   const [attendeeEdit, setAttendeeEdit] = useState(null); // { session, attendee }
   const [templateModal, setTemplateModal] = useState(null);
+  const [vacationModal, setVacationModal] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [history, setHistory] = useState([]);
   const HISTORY_LIMIT = 20;
   const pushHistory = () => {
     setHistory((h) => {
-      const snapshot = { families, slots, templates };
+      const snapshot = { families, slots, templates, vacations };
       const next = [...h, snapshot];
       return next.length > HISTORY_LIMIT ? next.slice(next.length - HISTORY_LIMIT) : next;
     });
@@ -788,6 +867,7 @@ function StudioCRM({ onLogout }) {
       setFamilies(prev.families);
       setSlots(prev.slots);
       setTemplates(prev.templates);
+      setVacations(prev.vacations || []);
       return h.slice(0, -1);
     });
   };
@@ -828,6 +908,7 @@ function StudioCRM({ onLogout }) {
       setFamilies(mergeSeedFamilies(loadedFamilies, SEED_FAMILIES));
       setTemplates(mergeSeedTemplates(loadedTemplates, SEED_TEMPLATES));
       setSlots(data?.value?.slots || []);
+      setVacations(data?.value?.vacations || []);
       setSaveError("");
     } catch (e) {
       setSaveError("讀取資料失敗，請確認網路連線與資料庫設定");
@@ -838,13 +919,13 @@ function StudioCRM({ onLogout }) {
     (async () => { await loadFromServer(); setLoaded(true); })();
   }, [loadFromServer]);
 
-  const persist = useCallback(async (f, s, t) => {
+  const persist = useCallback(async (f, s, t, v) => {
     try {
-      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t }, updated_at: new Date().toISOString() });
+      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t, vacations: v }, updated_at: new Date().toISOString() });
       setSaveError(error ? "儲存失敗，請稍後再試" : "");
     } catch (e) { setSaveError("儲存失敗，請稍後再試"); }
   }, []);
-  useEffect(() => { if (loaded) persist(families, slots, templates); }, [families, slots, templates, loaded]); // eslint-disable-line
+  useEffect(() => { if (loaded) persist(families, slots, templates, vacations); }, [families, slots, templates, vacations, loaded]); // eslint-disable-line
 
   /* ---------- 查找工具 ---------- */
   const findMember = (familyId, memberId) => families.find((f) => f.id === familyId)?.members.find((m) => m.id === memberId);
@@ -872,6 +953,9 @@ function StudioCRM({ onLogout }) {
   /* ---------- 固定課程 CRUD ---------- */
   const saveTemplate = (tpl) => { pushHistory(); setTemplates((prev) => (prev.some((t) => t.id === tpl.id) ? prev.map((t) => (t.id === tpl.id ? tpl : t)) : [...prev, tpl])); setTemplateModal(null); };
   const deleteTemplate = (id) => { pushHistory(); setTemplates((prev) => prev.filter((t) => t.id !== id)); setSlots((prev) => prev.filter((s) => s.fromTemplateId !== id)); };
+
+  const addVacation = (v) => { pushHistory(); setVacations((prev) => [...prev, { id: uid(), ...v }]); };
+  const deleteVacation = (id) => { pushHistory(); setVacations((prev) => prev.filter((v) => v.id !== id)); };
   const addCancelledDate = (templateId, dateStr) => setTemplates((prev) => prev.map((t) => (t.id === templateId ? { ...t, cancelledDates: [...(t.cancelledDates || []), dateStr] } : t)));
 
   /* ---------- 產生某天的所有時段（真實 + 虛擬固定課程） ---------- */
@@ -879,6 +963,19 @@ function StudioCRM({ onLogout }) {
     const plan = row.planId ? findPlan(row.familyId, row.memberId, row.planId) : null;
     const fee = plan ? Number(plan.prices?.[template.durationKey]) || 0 : 0;
     return { id: row.id, familyId: row.familyId, memberId: row.memberId, planId: row.planId || null, courseType: template.courseType, fee, paymentMode: "單次", paid: false, attendance: null, deducted: false };
+  };
+
+  const isDateAllDayVacation = (dateStr) => vacations.some((v) => v.allDay && dateStr >= v.startDate && dateStr <= v.endDate);
+  const isSlotInVacation = (dateStr, startTime, minutes) => {
+    return vacations.some((v) => {
+      if (dateStr < v.startDate || dateStr > v.endDate) return false;
+      if (v.allDay) return true;
+      const sMin = timeToMinutes(startTime);
+      const eMin = sMin + minutes;
+      const vs = timeToMinutes(v.startTime || "00:00");
+      const ve = timeToMinutes(v.endTime || "23:59");
+      return sMin < ve && vs < eMin;
+    });
   };
 
   const getDaySessions = useCallback((dateStr) => {
@@ -891,13 +988,14 @@ function StudioCRM({ onLogout }) {
       .filter((t) => (!t.startDate || dateStr >= t.startDate) && (!t.endDate || dateStr <= t.endDate))
       .filter((t) => !(t.cancelledDates || []).includes(dateStr))
       .filter((t) => !real.some((r) => r.fromTemplateId === t.id))
+      .filter((t) => !isSlotInVacation(dateStr, t.startTime, durationByKey(t.durationKey).minutes))
       .map((t) => ({
         id: `virtual-${t.id}-${dateStr}`, virtual: true, templateId: t.id, date: dateStr,
         startTime: t.startTime, durationKey: t.durationKey, courseType: t.courseType, mode: t.mode,
         name: t.name, attendees: t.attendees.map((row) => buildVirtualAttendee(row, t)),
       }));
     return [...real, ...virtual].sort((a, b) => a.startTime.localeCompare(b.startTime));
-  }, [slots, templates, families]); // eslint-disable-line
+  }, [slots, templates, families, vacations]); // eslint-disable-line
 
   const buildRealFromVirtual = (session) => ({
     id: uid(), date: session.date, startTime: session.startTime, durationKey: session.durationKey,
@@ -1192,7 +1290,8 @@ function StudioCRM({ onLogout }) {
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{year} 年 {mon + 1} 月</div>
                 <button style={btnGhost} onClick={() => setMonth(new Date(year, mon + 1, 1))}><ChevronRight size={16} /></button>
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
+                <button style={btnGhost} onClick={() => setVacationModal(true)}><CalendarOff size={14} />休假設定</button>
                 <button style={btnGhost} onClick={() => { setPrintMode("calendar"); setTimeout(() => window.print(), 60); }}><Printer size={14} />列印本月課表（A4）</button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
@@ -1206,12 +1305,18 @@ function StudioCRM({ onLogout }) {
                   const isSelected = ds === selectedDate;
                   const isToday = ds === todayStr();
                   const conflictDate = items.some((it) => findConflicts(it, items).length > 0);
+                  const dayVacation = vacations.find((v) => ds >= v.startDate && ds <= v.endDate);
                   return (
-                    <div key={i} role="button" tabIndex={0} onClick={() => setSelectedDate(ds)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedDate(ds); }} style={{ boxSizing: "border-box", width: "100%", border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 130, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
+                    <div key={i} role="button" tabIndex={0} onClick={() => setSelectedDate(ds)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedDate(ds); }} style={{ boxSizing: "border-box", width: "100%", border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: dayVacation && dayVacation.allDay ? "#F2ECE4" : isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 130, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 12, fontWeight: isToday ? 800 : 600 }}>{d.getDate()}</span>
                         {conflictDate && <AlertTriangle size={11} color="#B4302A" />}
                       </div>
+                      {dayVacation && (
+                        <div style={{ fontSize: 9.5, color: "#8A6D4B", fontWeight: 700, display: "flex", alignItems: "center", gap: 2 }}>
+                          <CalendarOff size={9} />{dayVacation.allDay ? "休假" : `休假 ${dayVacation.startTime}-${dayVacation.endTime}`}
+                        </div>
+                      )}
                       {items.slice(0, 5).map((it) => {
                         const ci = courseInfo(it.courseType || COURSE_TYPES[0].key);
                         const names = it.attendees.map((a) => memberNameOnly(a)).join("、");
@@ -1230,6 +1335,7 @@ function StudioCRM({ onLogout }) {
               <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12, color: "#8A8272", flexWrap: "wrap" }}>
                 <span><Repeat size={11} style={{ verticalAlign: -1 }} /> 固定課程自動帶入</span>
                 <span><AlertTriangle size={11} color="#B4302A" style={{ verticalAlign: -1 }} /> 當日有衝堂</span>
+                <span><CalendarOff size={11} style={{ verticalAlign: -1 }} /> 休假期間（固定課程不會自動帶入）</span>
               </div>
             </div>
 
@@ -1544,6 +1650,7 @@ function StudioCRM({ onLogout }) {
             date={selectedDate}
             initial={slotTimeModal.session}
             conflictCandidates={daySessions}
+            vacations={vacations}
             onSave={(fields) => (slotTimeModal.mode === "new" ? createManualSession(fields) : updateSessionTime(slotTimeModal.session, fields))}
             onCancel={() => setSlotTimeModal(null)}
           />
@@ -1577,6 +1684,12 @@ function StudioCRM({ onLogout }) {
       {templateModal && (
         <Modal title={templateModal === "new" ? "新增固定課程" : "編輯固定課程"} onClose={() => setTemplateModal(null)} width={580}>
           <RecurringTemplateForm initial={templateModal === "new" ? null : templateModal} families={families} onSave={saveTemplate} onCancel={() => setTemplateModal(null)} />
+        </Modal>
+      )}
+
+      {vacationModal && (
+        <Modal title="休假設定（不排課期間）" onClose={() => setVacationModal(false)} width={520}>
+          <VacationForm vacations={vacations} onAdd={addVacation} onDelete={deleteVacation} />
         </Modal>
       )}
       </div>
