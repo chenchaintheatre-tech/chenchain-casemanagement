@@ -972,12 +972,12 @@ function StudioCRM({ onLogout }) {
                   const isToday = ds === todayStr();
                   const conflictDate = items.some((it) => findConflicts(it, items).length > 0);
                   return (
-                    <div key={i} role="button" tabIndex={0} onClick={() => setSelectedDate(ds)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedDate(ds); }} style={{ boxSizing: "border-box", width: "100%", border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 92, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
+                    <div key={i} role="button" tabIndex={0} onClick={() => setSelectedDate(ds)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedDate(ds); }} style={{ boxSizing: "border-box", width: "100%", border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 130, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 12, fontWeight: isToday ? 800 : 600 }}>{d.getDate()}</span>
                         {conflictDate && <AlertTriangle size={11} color="#B4302A" />}
                       </div>
-                      {items.slice(0, 3).map((it) => {
+                      {items.slice(0, 5).map((it) => {
                         const ci = courseInfo(it.courseType || COURSE_TYPES[0].key);
                         const names = it.attendees.map((a) => memberNameOnly(a)).join("、");
                         return (
@@ -987,7 +987,7 @@ function StudioCRM({ onLogout }) {
                           </div>
                         );
                       })}
-                      {items.length > 3 && <div style={{ fontSize: 9, color: "#9A9284" }}>+{items.length - 3} 更多</div>}
+                      {items.length > 5 && <div style={{ fontSize: 9, color: "#9A9284" }}>+{items.length - 5} 更多</div>}
                     </div>
                   );
                 })}
