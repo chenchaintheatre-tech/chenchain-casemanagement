@@ -306,6 +306,13 @@ function SlotTimeForm({ date, initial, conflictCandidates, vacations, onSave, on
   const [courseType, setCourseType] = useState(initial?.courseType || "");
   const [mode, setMode] = useState(initial?.mode || "實體");
 
+  const availableDurations = durationsForCourseType(courseType);
+  useEffect(() => {
+    if (!availableDurations.some((d) => d.key === durationKey)) {
+      setDurationKey(availableDurations[0].key);
+    }
+  }, [courseType]); // eslint-disable-line
+
   const preview = { id: initial?.id || "__new__", startTime, durationKey };
   const conflicts = findConflicts(preview, conflictCandidates);
   const dayVacation = (vacations || []).find((v) => {
@@ -327,7 +334,7 @@ function SlotTimeForm({ date, initial, conflictCandidates, vacations, onSave, on
         <Field label="開始時間"><input style={inputStyle} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></Field>
         <Field label="堂數／時長">
           <select style={inputStyle} value={durationKey} onChange={(e) => setDurationKey(e.target.value)}>
-            {DURATIONS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+            {availableDurations.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
           </select>
         </Field>
       </div>
@@ -703,6 +710,13 @@ function RecurringTemplateForm({ initial, families, onSave, onCancel }) {
   const [endDate, setEndDate] = useState(initial?.endDate || "");
   const [attendees, setAttendees] = useState(initial?.attendees || []);
 
+  const availableDurations = durationsForCourseType(courseType);
+  useEffect(() => {
+    if (!availableDurations.some((d) => d.key === durationKey)) {
+      setDurationKey(availableDurations[0].key);
+    }
+  }, [courseType]); // eslint-disable-line
+
   const addRow = () => setAttendees([...attendees, { id: uid(), familyId: "", memberId: "", planId: "" }]);
   const updateRow = (id, next) => setAttendees(attendees.map((r) => (r.id === id ? next : r)));
   const removeRow = (id) => setAttendees(attendees.filter((r) => r.id !== id));
@@ -750,7 +764,7 @@ function RecurringTemplateForm({ initial, families, onSave, onCancel }) {
         <Field label="開始時間"><input style={inputStyle} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></Field>
         <Field label="堂數／時長">
           <select style={inputStyle} value={durationKey} onChange={(e) => setDurationKey(e.target.value)}>
-            {DURATIONS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+            {availableDurations.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
           </select>
         </Field>
       </div>
