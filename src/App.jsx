@@ -905,8 +905,8 @@ function StudioCRM({ onLogout }) {
       if (error) throw error;
       const loadedFamilies = data?.value?.families || [];
       const loadedTemplates = data?.value?.templates || [];
-      setFamilies(mergeSeedFamilies(loadedFamilies, SEED_FAMILIES));
-      setTemplates(mergeSeedTemplates(loadedTemplates, SEED_TEMPLATES));
+      setFamilies(loadedFamilies); // 種子資料自動合併已關閉，避免覆蓋或還原使用者刪除過的資料
+      setTemplates(loadedTemplates); // 種子資料自動合併已關閉，避免覆蓋或還原使用者刪除過的資料
       setSlots(data?.value?.slots || []);
       setVacations(data?.value?.vacations || []);
       setSaveError("");
