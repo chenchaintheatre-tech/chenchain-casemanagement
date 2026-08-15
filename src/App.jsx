@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet
 } from "lucide-react";
 
 /* =========================================================
@@ -757,6 +758,11 @@ function StudioCRM({ onLogout }) {
   const [templates, setTemplates] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("calendar");
+  const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
+  const [reportStudentKey, setReportStudentKey] = useState("");
+  const [reportFamilyId, setReportFamilyId] = useState("");
+  const [printMode, setPrintMode] = useState(null); // null | 'calendar' | 'report'
+  const [printReportData, setPrintReportData] = useState(null); // { title, tables: [{name, headers, rows}] }
   const [month, setMonth] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [familyModal, setFamilyModal] = useState(null);
@@ -990,16 +996,158 @@ function StudioCRM({ onLogout }) {
 
   const topUp = (familyId, planId) => {};
 
-  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["billing", "收費總覽", DollarSign]];
+  /* ---------- 報表輔助函式 ---------- */
+  const getMonthSessions = (year, mon) => {
+    const daysInMonth = new Date(year, mon + 1, 0).getDate();
+    const result = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      result.push(...getDaySessions(toDateStr(new Date(year, mon, d))));
+    }
+    return result.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  };
+  const weekdayOf = (dateStr) => WEEKDAY_FULL[new Date(dateStr + "T00:00:00").getDay()];
+  const attendeeStatusLabel = (a) => (a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
+  const downloadSheet = (sheets, filename) => {
+    const wb = XLSX.utils.book_new();
+    sheets.forEach(({ name, rows, isAoa }) => {
+      const ws = isAoa ? XLSX.utils.aoa_to_sheet(rows) : XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    });
+    XLSX.writeFile(wb, filename);
+  };
+  const doPrint = (title, tables) => {
+    setPrintReportData({ title, tables });
+    setPrintMode("report");
+    setTimeout(() => window.print(), 60);
+  };
+
+  // 報表一：每月收入
+  const buildMonthlyIncome = () => {
+    const [y, m] = reportMonth.split("-").map(Number);
+    const sessions = getMonthSessions(y, m - 1);
+    const headers = ["日期", "星期", "時間", "家庭", "學生", "課程類型", "費用", "繳費方式", "繳費狀態"];
+    const rows = [];
+    let totalFee = 0, paidFee = 0;
+    sessions.forEach((s) => {
+      s.attendees.forEach((a) => {
+        totalFee += a.fee || 0;
+        const isPaid = a.paymentMode === "儲值" ? !!a.deducted : !!a.paid;
+        if (isPaid) paidFee += a.fee || 0;
+        rows.push({
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 家庭: families.find((f) => f.id === a.familyId)?.familyName || "",
+          學生: memberNameOnly(a), 課程類型: a.courseType, 費用: a.fee || 0, 繳費方式: a.paymentMode, 繳費狀態: attendeeStatusLabel(a),
+        });
+      });
+    });
+    const summaryRows = [...rows, {}, { 日期: "合計應收", 費用: totalFee }, { 日期: "已收金額", 費用: paidFee }, { 日期: "未收金額", 費用: totalFee - paidFee }];
+    return { title: `${y}年${m}月收入`, filename: `${y}-${pad(m)}_每月收入.xlsx`, headers, rows, summaryRows };
+  };
+  const exportMonthlyIncome = () => { const { title, filename, summaryRows } = buildMonthlyIncome(); downloadSheet([{ name: title, rows: summaryRows }], filename); };
+  const printMonthlyIncome = () => { const { title, headers, summaryRows } = buildMonthlyIncome(); doPrint(title, [{ name: title, headers, rows: summaryRows }]); };
+
+  // 報表二：每月課程明細
+  const buildMonthlyDetail = () => {
+    const [y, m] = reportMonth.split("-").map(Number);
+    const sessions = getMonthSessions(y, m - 1);
+    const headers = ["日期", "星期", "時間", "堂數時長", "課程類型", "上課方式", "家庭", "學生", "出席狀態", "費用", "是否來自固定課程"];
+    const rows = [];
+    sessions.forEach((s) => {
+      s.attendees.forEach((a) => {
+        rows.push({
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 堂數時長: durationByKey(s.durationKey).label,
+          課程類型: a.courseType, 上課方式: s.mode || "實體", 家庭: families.find((f) => f.id === a.familyId)?.familyName || "",
+          學生: memberNameOnly(a), 出席狀態: a.attendance || "尚未記錄", 費用: a.fee || 0, 是否來自固定課程: s.virtual || s.fromTemplateId ? "是" : "否",
+        });
+      });
+    });
+    return { title: `${y}年${m}月課程明細`, filename: `${y}-${pad(m)}_每月課程明細.xlsx`, headers, rows };
+  };
+  const exportMonthlyDetail = () => { const { title, filename, rows } = buildMonthlyDetail(); downloadSheet([{ name: title, rows }], filename); };
+  const printMonthlyDetail = () => { const { title, headers, rows } = buildMonthlyDetail(); doPrint(title, [{ name: title, headers, rows }]); };
+
+  // 報表三：個別學生課程明細
+  const buildStudentDetail = () => {
+    if (!reportStudentKey) return null;
+    const [familyId, memberId] = reportStudentKey.split("::");
+    const fam = families.find((f) => f.id === familyId);
+    const member = fam?.members.find((m) => m.id === memberId);
+    const headers = ["日期", "星期", "時間", "堂數時長", "課程類型", "上課方式", "出席狀態", "費用", "繳費方式", "繳費狀態"];
+    const rows = [];
+    slots.forEach((s) => {
+      s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).forEach((a) => {
+        rows.push({
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 堂數時長: durationByKey(s.durationKey).label,
+          課程類型: a.courseType, 上課方式: s.mode || "實體", 出席狀態: a.attendance || "尚未記錄",
+          費用: a.fee || 0, 繳費方式: a.paymentMode, 繳費狀態: attendeeStatusLabel(a),
+        });
+      });
+    });
+    rows.sort((a, b) => (a.日期 + a.時間).localeCompare(b.日期 + b.時間));
+    const totalFee = rows.reduce((sum, r) => sum + r.費用, 0);
+    const sessionCount = slots.reduce((n, s) => n + s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).length, 0);
+    const summaryRows = [...rows, {}, { 日期: "累計堂數", 星期: `${sessionCount} 次` }, { 日期: "累計費用", 費用: totalFee }];
+    const title = `${fam?.familyName || ""}_${member?.name || "學生"}_課程明細`;
+    return { title, filename: `${title}.xlsx`, headers, rows, summaryRows };
+  };
+  const exportStudentDetail = () => { const b = buildStudentDetail(); if (!b) return; downloadSheet([{ name: "課程明細", rows: b.summaryRows }], b.filename); };
+  const printStudentDetail = () => { const b = buildStudentDetail(); if (!b) return; doPrint(b.title, [{ name: "課程明細", headers: b.headers, rows: b.summaryRows }]); };
+
+  // 報表四：個別家庭收費明細
+  const buildFamilyDetail = () => {
+    if (!reportFamilyId) return null;
+    const fam = families.find((f) => f.id === reportFamilyId);
+    if (!fam) return null;
+    const sessionHeaders = ["日期", "星期", "時間", "學生", "課程類型", "費用", "繳費方式", "繳費狀態", "繳費日期", "付款方式", "末五碼", "發票"];
+    const sessionRows = [];
+    slots.forEach((s) => {
+      s.attendees.filter((a) => a.familyId === reportFamilyId).forEach((a) => {
+        sessionRows.push({
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 學生: memberNameOnly(a), 課程類型: a.courseType,
+          費用: a.fee || 0, 繳費方式: a.paymentMode, 繳費狀態: attendeeStatusLabel(a),
+          繳費日期: a.paidDate || "", 付款方式: a.method || "", 末五碼: a.last5 || "", 發票: a.invoiced ? "已開立" : "",
+        });
+      });
+    });
+    sessionRows.sort((a, b) => (a.日期 + a.時間).localeCompare(b.日期 + b.時間));
+    const totalFee = sessionRows.reduce((sum, r) => sum + r.費用, 0);
+    const sessionSummaryRows = [...sessionRows, {}, { 日期: "累計費用", 費用: totalFee }];
+
+    const accountHeaders = ["單堂價格", "剩餘堂數", "儲值日期", "儲值金額", "增加堂數", "付款方式", "末五碼", "發票"];
+    const accountRows = [];
+    (fam.storedAccounts || []).forEach((acc) => {
+      accountRows.push({ 單堂價格: acc.pricePerUnit, 剩餘堂數: acc.remainingUnits ?? 0, 儲值日期: "", 儲值金額: "", 增加堂數: "", 付款方式: "", 末五碼: "", 發票: "" });
+      (acc.topUps || []).forEach((t) => {
+        accountRows.push({ 單堂價格: "", 剩餘堂數: "", 儲值日期: t.date, 儲值金額: t.amount, 增加堂數: t.units, 付款方式: t.method, 末五碼: t.last5 || "", 發票: t.invoiced ? "已開立" : "" });
+      });
+    });
+    const accountRowsOrEmpty = accountRows.length ? accountRows : [{ 單堂價格: "（尚無儲值帳戶）" }];
+    return { title: `${fam.familyName}_收費明細`, filename: `${fam.familyName}_收費明細.xlsx`, sessionHeaders, sessionSummaryRows, accountHeaders, accountRowsOrEmpty };
+  };
+  const exportFamilyDetail = () => {
+    const b = buildFamilyDetail(); if (!b) return;
+    downloadSheet([{ name: "上課與繳費明細", rows: b.sessionSummaryRows }, { name: "儲值帳戶紀錄", rows: b.accountRowsOrEmpty }], b.filename);
+  };
+  const printFamilyDetail = () => {
+    const b = buildFamilyDetail(); if (!b) return;
+    doPrint(b.title, [
+      { name: "上課與繳費明細", headers: b.sessionHeaders, rows: b.sessionSummaryRows },
+      { name: "儲值帳戶紀錄", headers: b.accountHeaders, rows: b.accountRowsOrEmpty },
+    ]);
+  };
+
+  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet]];
 
   return (
     <>
       <style>{`
-        .print-calendar { display: none; }
+        .print-calendar, .print-report { display: none; }
         @media print {
           html, body { margin: 0; padding: 0; }
           .app-screen-view { display: none !important; }
-          .print-calendar { display: block !important; }
+          .print-calendar, .print-report { display: none !important; }
+          .print-calendar.active, .print-report.active { display: block !important; }
+          .print-report table { page-break-inside: auto; }
+          .print-report tr { page-break-inside: avoid; }
           @page { size: A4 landscape; margin: 8mm; }
         }
       `}</style>
@@ -1045,7 +1193,7 @@ function StudioCRM({ onLogout }) {
                 <button style={btnGhost} onClick={() => setMonth(new Date(year, mon + 1, 1))}><ChevronRight size={16} /></button>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-                <button style={btnGhost} onClick={() => window.print()}><Printer size={14} />列印本月課表（A4）</button>
+                <button style={btnGhost} onClick={() => { setPrintMode("calendar"); setTimeout(() => window.print(), 60); }}><Printer size={14} />列印本月課表（A4）</button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
                 {WEEKDAYS.map((w) => (
@@ -1319,6 +1467,69 @@ function StudioCRM({ onLogout }) {
             </div>
           </div>
         )}
+
+        {/* ---------------- 報表 ---------------- */}
+        {tab === "reports" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>報表匯出</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇報表種類與條件後，可下載 Excel 檔案或直接列印。</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+
+              <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>每月收入</div>
+                <Field label="月份">
+                  <input type="month" style={inputStyle} value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} />
+                </Field>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportMonthlyIncome}><FileSpreadsheet size={14} />匯出 Excel</button>
+                  <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={printMonthlyIncome}><Printer size={14} />列印</button>
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>每月課程明細</div>
+                <Field label="月份">
+                  <input type="month" style={inputStyle} value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} />
+                </Field>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportMonthlyDetail}><FileSpreadsheet size={14} />匯出 Excel</button>
+                  <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={printMonthlyDetail}><Printer size={14} />列印</button>
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>個別學生課程明細</div>
+                <Field label="選擇學生">
+                  <select style={inputStyle} value={reportStudentKey} onChange={(e) => setReportStudentKey(e.target.value)}>
+                    <option value="">請選擇學生</option>
+                    {families.flatMap((f) => f.members.map((m) => (
+                      <option key={`${f.id}::${m.id}`} value={`${f.id}::${m.id}`}>{f.familyName}・{m.name}</option>
+                    )))}
+                  </select>
+                </Field>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportStudentDetail} disabled={!reportStudentKey}><FileSpreadsheet size={14} />匯出 Excel</button>
+                  <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={printStudentDetail} disabled={!reportStudentKey}><Printer size={14} />列印</button>
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>個別家庭收費明細</div>
+                <Field label="選擇家庭">
+                  <select style={inputStyle} value={reportFamilyId} onChange={(e) => setReportFamilyId(e.target.value)}>
+                    <option value="">請選擇家庭</option>
+                    {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
+                  </select>
+                </Field>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportFamilyDetail} disabled={!reportFamilyId}><FileSpreadsheet size={14} />匯出 Excel</button>
+                  <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={printFamilyDetail} disabled={!reportFamilyId}><Printer size={14} />列印</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
       </div>
 
       {familyModal && (
@@ -1370,7 +1581,7 @@ function StudioCRM({ onLogout }) {
       )}
       </div>
 
-      <div className="print-calendar" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", color: "#1a1a1a", width: "100%", boxSizing: "border-box" }}>
+      <div className={"print-calendar" + (printMode === "calendar" ? " active" : "")} style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", color: "#1a1a1a", width: "100%", boxSizing: "border-box" }}>
         <h2 style={{ textAlign: "center", margin: "0 0 8px", fontSize: 22 }}>{year} 年 {mon + 1} 月課表</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
           <colgroup>
@@ -1413,6 +1624,33 @@ function StudioCRM({ onLogout }) {
             })()}
           </tbody>
         </table>
+      </div>
+
+      <div className={"print-report" + (printMode === "report" ? " active" : "")} style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", color: "#1a1a1a", width: "100%", boxSizing: "border-box" }}>
+        {printReportData && (
+          <>
+            <h2 style={{ textAlign: "center", margin: "0 0 12px", fontSize: 20 }}>{printReportData.title}</h2>
+            {printReportData.tables.map((t, ti) => (
+              <div key={ti} style={{ marginBottom: 20 }}>
+                {printReportData.tables.length > 1 && <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{t.name}</div>}
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {t.headers.map((h) => <th key={h} style={{ border: "1px solid #999", padding: "5px 4px", fontSize: 11, background: "#eee", textAlign: "left" }}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.rows.map((r, ri) => (
+                      <tr key={ri}>
+                        {t.headers.map((h) => <td key={h} style={{ border: "1px solid #ccc", padding: "4px 4px", fontSize: 10.5 }}>{r[h] ?? ""}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </>
   );
