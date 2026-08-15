@@ -1295,8 +1295,11 @@ function StudioCRM({ onLogout }) {
                       <td key={colIdx} style={{ border: "1px solid #ccc", height: printRowHeight, verticalAlign: "top", padding: 4, fontSize: 10.5, overflow: "hidden" }}>
                         <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 3 }}>{d.getDate()}</div>
                         {items.map((it) => (
-                          <div key={it.id} style={{ lineHeight: 1.3, marginBottom: 2, overflow: "hidden" }}>
-                            {it.startTime} {it.courseType || ""}{it.attendees.length ? `｜${it.attendees.map((a) => memberNameOnly(a)).join("、")}` : ""}
+                          <div key={it.id} style={{ marginBottom: 3 }}>
+                            <div style={{ fontWeight: 700, lineHeight: 1.2 }}>{it.startTime}</div>
+                            <div style={{ lineHeight: 1.3, overflow: "hidden" }}>
+                              {it.courseType || ""}{it.attendees.length ? `｜${it.attendees.map((a) => memberNameOnly(a)).join("、")}` : ""}
+                            </div>
                           </div>
                         ))}
                       </td>
