@@ -909,11 +909,10 @@ function StudioCRM({ onLogout }) {
       <style>{`
         .print-calendar { display: none; }
         @media print {
-          body * { visibility: hidden; }
-          .print-calendar, .print-calendar * { visibility: visible; }
-          .print-calendar { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+          html, body { margin: 0; padding: 0; }
           .app-screen-view { display: none !important; }
-          @page { size: A4 landscape; margin: 12mm; }
+          .print-calendar { display: block !important; }
+          @page { size: A4 landscape; margin: 8mm; }
         }
       `}</style>
       <div className="app-screen-view" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100%", color: "#2E2A22", padding: 20 }}>
@@ -1268,8 +1267,8 @@ function StudioCRM({ onLogout }) {
       )}
       </div>
 
-      <div className="print-calendar" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", padding: 10, color: "#1a1a1a" }}>
-        <h2 style={{ textAlign: "center", margin: "0 0 12px", fontSize: 20 }}>{year} 年 {mon + 1} 月課表</h2>
+      <div className="print-calendar" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", color: "#1a1a1a", width: "100%", boxSizing: "border-box" }}>
+        <h2 style={{ textAlign: "center", margin: "0 0 8px", fontSize: 22 }}>{year} 年 {mon + 1} 月課表</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
           <colgroup>
             <col style={{ width: "4%" }} />
@@ -1278,30 +1277,34 @@ function StudioCRM({ onLogout }) {
           <thead>
             <tr>
               {WEEKDAYS.map((w) => (
-                <th key={w} style={{ border: "1px solid #999", padding: "4px 2px", fontSize: 11, background: "#eee" }}>{w}</th>
+                <th key={w} style={{ border: "1px solid #999", padding: "5px 3px", fontSize: 13, background: "#eee" }}>{w}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: Math.ceil(cells.length / 7) }).map((_, rowIdx) => (
-              <tr key={rowIdx}>
-                {cells.slice(rowIdx * 7, rowIdx * 7 + 7).map((d, colIdx) => {
-                  if (!d) return <td key={colIdx} style={{ border: "1px solid #ccc", height: 90, verticalAlign: "top" }} />;
-                  const ds = toDateStr(d);
-                  const items = getDaySessions(ds);
-                  return (
-                    <td key={colIdx} style={{ border: "1px solid #ccc", height: 90, verticalAlign: "top", padding: 3, fontSize: 8.5 }}>
-                      <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 2 }}>{d.getDate()}</div>
-                      {items.map((it) => (
-                        <div key={it.id} style={{ lineHeight: 1.25, marginBottom: 1, overflow: "hidden" }}>
-                          {it.startTime} {it.courseType || ""}{it.attendees.length ? `｜${it.attendees.map((a) => memberNameOnly(a)).join("、")}` : ""}
-                        </div>
-                      ))}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {(() => {
+              const printRows = Math.ceil(cells.length / 7);
+              const printRowHeight = Math.max(95, Math.min(160, Math.floor(650 / printRows)));
+              return Array.from({ length: printRows }).map((_, rowIdx) => (
+                <tr key={rowIdx}>
+                  {cells.slice(rowIdx * 7, rowIdx * 7 + 7).map((d, colIdx) => {
+                    if (!d) return <td key={colIdx} style={{ border: "1px solid #ccc", height: printRowHeight, verticalAlign: "top" }} />;
+                    const ds = toDateStr(d);
+                    const items = getDaySessions(ds);
+                    return (
+                      <td key={colIdx} style={{ border: "1px solid #ccc", height: printRowHeight, verticalAlign: "top", padding: 4, fontSize: 10.5, overflow: "hidden" }}>
+                        <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 3 }}>{d.getDate()}</div>
+                        {items.map((it) => (
+                          <div key={it.id} style={{ lineHeight: 1.3, marginBottom: 2, overflow: "hidden" }}>
+                            {it.startTime} {it.courseType || ""}{it.attendees.length ? `｜${it.attendees.map((a) => memberNameOnly(a)).join("、")}` : ""}
+                          </div>
+                        ))}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ));
+            })()}
           </tbody>
         </table>
       </div>
