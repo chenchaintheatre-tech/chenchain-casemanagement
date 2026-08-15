@@ -786,7 +786,7 @@ function LoginScreen({ onLoggedIn }) {
   return (
     <div style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <form onSubmit={submit} style={{ background: "#fff", borderRadius: 16, border: "1px solid #EDE6D6", padding: 32, width: "100%", maxWidth: 380, boxShadow: "0 12px 32px rgba(0,0,0,0.06)" }}>
-        <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#2E2A22" }}>工作室個案管理系統</h1>
+        <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#2E2A22" }}>圈戲創作工作室課程及個案管理系統</h1>
         <div style={{ fontSize: 13, color: "#9A9284", marginBottom: 24 }}>請登入以繼續</div>
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#5C5648", marginBottom: 6 }}>帳號（Email）</label>
@@ -1272,7 +1272,7 @@ function StudioCRM({ onLogout }) {
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>工作室個案管理系統</h1>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>圈戲創作工作室課程及個案管理系統</h1>
             <div style={{ fontSize: 13, color: "#9A9284", marginTop: 2 }}>家庭・固定課程・排課・收費一站管理</div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
