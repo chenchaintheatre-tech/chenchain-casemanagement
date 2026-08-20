@@ -393,6 +393,11 @@ function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
   const [fee, setFee] = useState(attendee.fee ?? 0);
   const [paymentMode, setPaymentMode] = useState(attendee.paymentMode || "單次");
   const [storedAccountId, setStoredAccountId] = useState(attendee.storedAccountId || "");
+  const [paid, setPaid] = useState(!!attendee.paid);
+  const [paidDate, setPaidDate] = useState(attendee.paidDate || todayStr());
+  const [method, setMethod] = useState(attendee.method || "現金");
+  const [last5, setLast5] = useState(attendee.last5 || "");
+  const [invoiced, setInvoiced] = useState(!!attendee.invoiced);
   const duration = durationByKey(session.durationKey);
 
   const effUnit = effectiveUnits(courseType, session.durationKey);
@@ -408,12 +413,23 @@ function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
 
   const submit = () => {
     if (paymentMode === "儲值" && !storedAccountId) return;
-    onSave({
-      courseType,
-      fee: Number(fee) || 0,
-      paymentMode,
-      storedAccountId: paymentMode === "儲值" ? storedAccountId : null,
-    });
+    if (paymentMode === "儲值") {
+      onSave({
+        courseType,
+        fee: Number(fee) || 0,
+        paymentMode,
+        storedAccountId,
+        paid: undefined, paidDate: undefined, method: undefined, last5: undefined, invoiced: undefined,
+      });
+    } else {
+      onSave({
+        courseType,
+        fee: Number(fee) || 0,
+        paymentMode,
+        storedAccountId: null,
+        paid, paidDate: paid ? paidDate : "", method: paid ? method : "", last5: paid && method === "匯款" ? last5 : "", invoiced,
+      });
+    }
   };
 
   return (
@@ -444,6 +460,27 @@ function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
             <div style={warnBox(true)}><AlertCircle size={14} />此帳戶剩餘堂數可能不足（{effUnit} 堂）</div>
           )}
         </Field>
+      )}
+      {paymentMode === "單次" && (
+        <>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} />已收費
+          </label>
+          {paid && (
+            <>
+              <Field label="繳費日期"><input style={inputStyle} type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+              <Field label="付款方式">
+                <select style={inputStyle} value={method} onChange={(e) => setMethod(e.target.value)}>
+                  {PAYMENT_METHOD_TYPES.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </Field>
+              {method === "匯款" && <Field label="匯款帳號末五碼"><input style={inputStyle} maxLength={5} value={last5} onChange={(e) => setLast5(e.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="12345" /></Field>}
+            </>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={invoiced} onChange={(e) => setInvoiced(e.target.checked)} />已開立發票
+          </label>
+        </>
       )}
       {attendee.deducted && (
         <div style={warnBox(false)}><AlertCircle size={14} />此上課者原本已從儲值帳戶扣過堂數，若更改繳費方式或帳戶，系統會自動退回原帳戶，並依新設定重新處理。</div>
@@ -1518,7 +1555,9 @@ function StudioCRM({ onLogout }) {
                               <option value="">尚未記錄</option>
                               {ATTENDANCE_OPTIONS.map((op) => <option key={op} value={op}>{op}</option>)}
                             </select>
-                            {a.paymentMode === "單次" ? (
+                            {a.attendance === "請假" ? (
+                              <span style={{ color: "#1a1a1a", fontWeight: 700, fontSize: 11 }}>不計費</span>
+                            ) : a.paymentMode === "單次" ? (
                               <button onClick={() => setPaymentEdit({ session, attendee: a })} style={{ border: "none", background: "transparent", cursor: "pointer", fontWeight: 700, color: a.paid ? "#2F7A3B" : "#B4302A", fontSize: 11 }}>
                                 {a.paid ? "已繳費" : "未繳費"}
                               </button>
