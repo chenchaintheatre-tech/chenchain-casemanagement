@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy
 } from "lucide-react";
 
 /* =========================================================
@@ -879,6 +879,9 @@ function StudioCRM({ onLogout }) {
   const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [reportStudentKey, setReportStudentKey] = useState("");
   const [reportFamilyId, setReportFamilyId] = useState("");
+  const [msgFamilyId, setMsgFamilyId] = useState("");
+  const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
+  const [msgCopied, setMsgCopied] = useState(false);
   const [printMode, setPrintMode] = useState(null); // null | 'calendar' | 'report'
   const [printReportData, setPrintReportData] = useState(null); // { title, tables: [{name, headers, rows}] }
   const [month, setMonth] = useState(() => { const d = new Date(); d.setDate(1); return d; });
@@ -1178,6 +1181,44 @@ function StudioCRM({ onLogout }) {
     return result.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
   };
   const weekdayOf = (dateStr) => WEEKDAY_FULL[new Date(dateStr + "T00:00:00").getDay()];
+  const weekdayShort = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); return WEEKDAYS[(d.getDay() + 6) % 7]; };
+
+  // 每月課程表通知訊息生成器：依家庭與月份，整理出每位上課者當月的課表文字
+  const buildFamilyMonthMessage = () => {
+    if (!msgFamilyId) return "";
+    const fam = families.find((f) => f.id === msgFamilyId);
+    if (!fam) return "";
+    const [y, m] = msgMonth.split("-").map(Number);
+    const sessions = getMonthSessions(y, m - 1);
+    const byMember = {};
+    sessions.forEach((s) => {
+      s.attendees.filter((a) => a.familyId === msgFamilyId).forEach((a) => {
+        const name = memberNameOnly(a);
+        if (!byMember[name]) byMember[name] = [];
+        const d = new Date(s.date + "T00:00:00");
+        byMember[name].push({
+          label: `${d.getMonth() + 1}/${d.getDate()}（${weekdayShort(s.date)}）${s.startTime}　${a.courseType}`,
+          sortKey: s.date + s.startTime,
+        });
+      });
+    });
+    const names = Object.keys(byMember);
+    if (names.length === 0) return "";
+    let msg = `您好，跟您通知　${m}月課表：
+
+`;
+    names.forEach((name) => {
+      const lines = byMember[name].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+      msg += `${name}
+`;
+      lines.forEach((l) => { msg += `${l.label}
+`; });
+      msg += `
+`;
+    });
+    msg += `上課前會再通知您，如果需要請假也請提前跟我們說喔，謝謝您！`;
+    return msg;
+  };
   const attendeeStatusLabel = (a) => (a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
   const downloadSheet = (sheets, filename) => {
     const wb = XLSX.utils.book_new();
@@ -1307,7 +1348,7 @@ function StudioCRM({ onLogout }) {
     ]);
   };
 
-  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet]];
+  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet], ["notify", "通知訊息", MessageSquare]];
 
   return (
     <>
@@ -1754,6 +1795,51 @@ function StudioCRM({ onLogout }) {
               </div>
 
             </div>
+          </div>
+        )}
+
+        {/* ---------------- 每月課程表通知訊息生成器 ---------------- */}
+        {tab === "notify" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>每月課程表通知訊息生成器</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇家庭與月份，自動整理出當月課表文字，方便複製貼給家長。</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 220px" }}>
+                <Field label="選擇家庭">
+                  <select style={inputStyle} value={msgFamilyId} onChange={(e) => { setMsgFamilyId(e.target.value); setMsgCopied(false); }}>
+                    <option value="">請選擇家庭</option>
+                    {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div style={{ flex: "1 1 160px" }}>
+                <Field label="月份">
+                  <input type="month" style={inputStyle} value={msgMonth} onChange={(e) => { setMsgMonth(e.target.value); setMsgCopied(false); }} />
+                </Field>
+              </div>
+            </div>
+
+            {(() => {
+              const message = buildFamilyMonthMessage();
+              return (
+                <>
+                  <textarea
+                    readOnly
+                    value={message || (msgFamilyId ? "這個家庭在選擇的月份沒有排課紀錄。" : "請先選擇家庭與月份。")}
+                    style={{ width: "100%", minHeight: 260, boxSizing: "border-box", padding: 12, borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, lineHeight: 1.6, fontFamily: "inherit", resize: "vertical", background: "#FBF8F1", color: "#2E2A22" }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                    <button
+                      style={btnPrimary}
+                      disabled={!message}
+                      onClick={() => { navigator.clipboard.writeText(message); setMsgCopied(true); setTimeout(() => setMsgCopied(false), 2000); }}
+                    >
+                      <Copy size={14} />{msgCopied ? "已複製！" : "複製訊息"}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
