@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck
 } from "lucide-react";
 
 /* =========================================================
@@ -283,14 +283,18 @@ function FamilyForm({ initial, onSave, onCancel }) {
       </div>
       {members.length === 0 && <div style={{ fontSize: 13, color: "#9A9284", marginBottom: 10 }}>請至少新增一位成員（例如學生本人）。</div>}
       {members.map((m) => (
-        <div key={m.id} style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 14, marginBottom: 12, background: "#FBF8F1" }}>
+        <div key={m.id} style={{ border: m.suspended ? "1px solid #D9C7A8" : "1px solid #EDE6D6", borderRadius: 12, padding: 14, marginBottom: 12, background: m.suspended ? "#F2ECE0" : "#FBF8F1" }}>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             <input style={{ ...inputStyle, flex: 2 }} value={m.name} onChange={(e) => updateMember(m.id, { name: e.target.value })} placeholder="成員姓名" />
             <select style={{ ...inputStyle, flex: 1 }} value={m.relation} onChange={(e) => updateMember(m.id, { relation: e.target.value })}>
               {RELATIONS.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
+            <button style={{ ...btnGhost, ...btnSm }} onClick={() => updateMember(m.id, { suspended: !m.suspended })} title={m.suspended ? "恢復上課" : "標記停課"}>
+              {m.suspended ? <UserCheck size={14} /> : <UserX size={14} />}
+            </button>
             <button style={btnDanger} onClick={() => removeMember(m.id)}><Trash2 size={14} /></button>
           </div>
+          {m.suspended && <div style={{ fontSize: 11, color: "#8A6D4B", fontWeight: 700, marginBottom: 8 }}>已停課，不會出現在「家庭與學生」列表</div>}
           <PlansEditor plans={m.plans} onChange={(plans) => updateMember(m.id, { plans })} />
         </div>
       ))}
@@ -1010,6 +1014,15 @@ function StudioCRM({ onLogout }) {
     setTemplates((prev) => prev.map((t) => ({ ...t, attendees: t.attendees.filter((a) => a.familyId !== id) })));
   };
 
+  // 標記／取消停課：停課的成員不會出現在「家庭與學生」列表，改列在「已停課名單」
+  const setMemberSuspended = (familyId, memberId, suspended) => {
+    pushHistory();
+    setFamilies((prev) => prev.map((f) => (f.id !== familyId ? f : {
+      ...f,
+      members: f.members.map((m) => (m.id === memberId ? { ...m, suspended } : m)),
+    })));
+  };
+
   /* ---------- 固定課程 CRUD ---------- */
   const saveTemplate = (tpl) => { pushHistory(); setTemplates((prev) => (prev.some((t) => t.id === tpl.id) ? prev.map((t) => (t.id === tpl.id ? tpl : t)) : [...prev, tpl])); setTemplateModal(null); };
   const deleteTemplate = (id) => { pushHistory(); setTemplates((prev) => prev.filter((t) => t.id !== id)); setSlots((prev) => prev.filter((s) => s.fromTemplateId !== id)); };
@@ -1294,7 +1307,7 @@ function StudioCRM({ onLogout }) {
     ]);
   };
 
-  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet]];
+  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet]];
 
   return (
     <>
@@ -1529,7 +1542,10 @@ function StudioCRM({ onLogout }) {
             </div>
             {families.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未新增家庭。</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {families.map((f) => (
+              {families.map((f) => {
+                const activeMembers = f.members.filter((m) => !m.suspended);
+                if (f.members.length > 0 && activeMembers.length === 0) return null;
+                return (
                 <div key={f.id} ref={(el) => (familyRefs.current[f.id] = el)} style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 14, scrollMarginTop: 20 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
@@ -1551,9 +1567,12 @@ function StudioCRM({ onLogout }) {
                     </div>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                    {f.members.map((m) => (
+                    {activeMembers.map((m) => (
                       <div key={m.id} style={{ background: "#FBF8F1", borderRadius: 9, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>{m.name} <span style={{ fontWeight: 500, color: "#9A9284", fontSize: 12 }}>（{m.relation}）</span></div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>{m.name} <span style={{ fontWeight: 500, color: "#9A9284", fontSize: 12 }}>（{m.relation}）</span></div>
+                          <button style={{ ...btnGhost, ...btnSm }} onClick={() => setMemberSuspended(f.id, m.id, true)}><UserX size={12} />停課</button>
+                        </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                           {m.plans.map((p) => { const ci = courseInfo(p.courseType); return <span key={p.id} style={{ fontSize: 11, background: ci.bg, color: ci.color, padding: "3px 9px", borderRadius: 99, fontWeight: 600 }}>{p.courseType}</span>; })}
                           {m.plans.length === 0 && <span style={{ fontSize: 11, color: "#B7B0A0" }}>尚未設定課程</span>}
@@ -1563,7 +1582,34 @@ function StudioCRM({ onLogout }) {
                     {f.members.length === 0 && <div style={{ fontSize: 12, color: "#B7B0A0" }}>尚無成員</div>}
                   </div>
                 </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- 已停課名單 ---------------- */}
+        {tab === "suspended" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>已停課名單</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 16 }}>這裡列出所有被標記為停課的成員，不會出現在「家庭與學生」列表中。</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {families.flatMap((f) => f.members.filter((m) => m.suspended).map((m) => ({ f, m }))).map(({ f, m }) => (
+                <div key={m.id} style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{f.familyName}・{m.name} <span style={{ fontWeight: 500, color: "#9A9284", fontSize: 12 }}>（{m.relation}）</span></div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                      {m.plans.map((p) => { const ci = courseInfo(p.courseType); return <span key={p.id} style={{ fontSize: 11, background: ci.bg, color: ci.color, padding: "3px 9px", borderRadius: 99, fontWeight: 600 }}>{p.courseType}</span>; })}
+                      {m.plans.length === 0 && <span style={{ fontSize: 11, color: "#B7B0A0" }}>尚未設定課程</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button style={btnPrimary} onClick={() => setMemberSuspended(f.id, m.id, false)}><UserCheck size={13} />恢復上課</button>
+                    <button style={btnGhost} onClick={() => setFamilyModal(f)}><Edit3 size={13} />編輯</button>
+                  </div>
+                </div>
               ))}
+              {families.every((f) => f.members.every((m) => !m.suspended)) && <div style={{ fontSize: 13, color: "#9A9284" }}>目前沒有停課的成員。</div>}
             </div>
           </div>
         )}
