@@ -882,6 +882,7 @@ function StudioCRM({ onLogout }) {
   const [msgFamilyId, setMsgFamilyId] = useState("");
   const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgCopied, setMsgCopied] = useState(false);
+  const [msgFamilySearch, setMsgFamilySearch] = useState("");
   const [printMode, setPrintMode] = useState(null); // null | 'calendar' | 'report'
   const [printReportData, setPrintReportData] = useState(null); // { title, tables: [{name, headers, rows}] }
   const [month, setMonth] = useState(() => { const d = new Date(); d.setDate(1); return d; });
@@ -1183,7 +1184,27 @@ function StudioCRM({ onLogout }) {
   const weekdayOf = (dateStr) => WEEKDAY_FULL[new Date(dateStr + "T00:00:00").getDay()];
   const weekdayShort = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); return WEEKDAYS[(d.getDay() + 6) % 7]; };
 
+  const searchMsgFamily = () => {
+    const q = msgFamilySearch.trim();
+    if (!q) return;
+    const match = families.find((f) => f.familyName.includes(q) || f.members.some((m) => m.name.includes(q)));
+    if (match) { setMsgFamilyId(match.id); setMsgCopied(false); }
+  };
+
+  // 中文姓名省略姓氏（僅取名字部分），非中文姓名（如英文名）維持原樣
+  const givenNameOnly = (fullName) => {
+    if (!fullName) return fullName;
+    const isChinese = /^[\u4e00-\u9fff]+$/.test(fullName);
+    return isChinese && fullName.length >= 2 ? fullName.slice(1) : fullName;
+  };
+
   // 每月課程表通知訊息生成器：依家庭與月份，整理出每位上課者當月的課表文字
+  const addMinutesToTime = (timeStr, minutes) => {
+    const [h, mi] = timeStr.split(":").map(Number);
+    const total = (h * 60 + mi + minutes + 1440) % 1440;
+    return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+  };
+
   const buildFamilyMonthMessage = () => {
     if (!msgFamilyId) return "";
     const fam = families.find((f) => f.id === msgFamilyId);
@@ -1196,25 +1217,20 @@ function StudioCRM({ onLogout }) {
         const name = memberNameOnly(a);
         if (!byMember[name]) byMember[name] = [];
         const d = new Date(s.date + "T00:00:00");
+        const endTime = addMinutesToTime(s.startTime, durationByKey(s.durationKey).minutes);
         byMember[name].push({
-          label: `${d.getMonth() + 1}/${d.getDate()}（${weekdayShort(s.date)}）${s.startTime}　${a.courseType}`,
+          label: `${d.getMonth() + 1}/${d.getDate()}(${weekdayShort(s.date)})${s.startTime}-${endTime} ${a.courseType}`,
           sortKey: s.date + s.startTime,
         });
       });
     });
     const names = Object.keys(byMember);
     if (names.length === 0) return "";
-    let msg = `您好，跟您通知　${m}月課表：
-
-`;
+    let msg = `您好，跟您通知${m}月課表：\n`;
     names.forEach((name) => {
       const lines = byMember[name].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-      msg += `${name}
-`;
-      lines.forEach((l) => { msg += `${l.label}
-`; });
-      msg += `
-`;
+      msg += `${givenNameOnly(name)}\n`;
+      lines.forEach((l) => { msg += `${l.label}\n`; });
     });
     msg += `上課前會再通知您，如果需要請假也請提前跟我們說喔，謝謝您！`;
     return msg;
@@ -1804,8 +1820,22 @@ function StudioCRM({ onLogout }) {
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>每月課程表通知訊息生成器</div>
             <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇家庭與月份，自動整理出當月課表文字，方便複製貼給家長。</div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 240px" }}>
+                <Field label="搜尋家庭或學生姓名">
+                  <div style={{ position: "relative" }}>
+                    <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#B7B0A0" }} />
+                    <input
+                      style={{ ...inputStyle, paddingLeft: 30 }}
+                      placeholder="輸入姓名，按 Enter 搜尋"
+                      value={msgFamilySearch}
+                      onChange={(e) => setMsgFamilySearch(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") searchMsgFamily(); }}
+                    />
+                  </div>
+                </Field>
+              </div>
               <div style={{ flex: "1 1 220px" }}>
-                <Field label="選擇家庭">
+                <Field label="或直接選擇家庭">
                   <select style={inputStyle} value={msgFamilyId} onChange={(e) => { setMsgFamilyId(e.target.value); setMsgCopied(false); }}>
                     <option value="">請選擇家庭</option>
                     {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
