@@ -38,6 +38,12 @@ const durationsForCourseType = (courseType) => {
   }
   return DURATIONS;
 };
+// 依課程類型取得正確的堂數顯示文字（團體課的80分鐘要顯示「1堂」而不是「1.5堂」）
+const durationLabelFor = (courseType, durationKey) => {
+  const list = durationsForCourseType(courseType);
+  const found = list.find((d) => d.key === durationKey);
+  return (found || durationByKey(durationKey)).label;
+};
 const emptyPrices = () => ({ u05m25: "", u05m30: "", u1m50: "", u1m60: "", u15m80: "" });
 
 const MODES = ["實體", "線上"];
@@ -985,6 +991,11 @@ function StudioCRM({ onLogout }) {
     return m ? `${fam.familyName}・${m.name}` : "（成員已刪除）";
   };
   const memberNameOnly = (a) => findMember(a.familyId, a.memberId)?.name || "（已刪除）";
+  // 請假的學員在月曆上以括號標示姓名，方便辨識
+  const displayNameWithLeave = (a) => {
+    const name = memberNameOnly(a);
+    return a.attendance === "請假" ? `(${name})` : name;
+  };
 
   const adjustStoredAccount = (familyId, accountId, delta) => {
     setFamilies((prev) => prev.map((f) => (f.id !== familyId ? f : { ...f, storedAccounts: (f.storedAccounts || []).map((a) => (a.id === accountId ? { ...a, remainingUnits: (a.remainingUnits ?? 0) + delta } : a)) })));
@@ -1137,7 +1148,7 @@ function StudioCRM({ onLogout }) {
     slots.forEach((s) => s.attendees.forEach((a) => {
       const key = `${a.familyId}__${a.memberId}__${a.courseType}`;
       if (!map[key]) map[key] = { familyId: a.familyId, memberId: a.memberId, courseType: a.courseType, sessionCount: 0, unitSum: 0, feeSum: 0 };
-      map[key].sessionCount += 1; map[key].unitSum += durationByKey(s.durationKey).unit; map[key].feeSum += a.fee || 0;
+      map[key].sessionCount += 1; map[key].unitSum += effectiveUnits(a.courseType, s.durationKey); map[key].feeSum += a.fee || 0;
     }));
     return Object.values(map);
   }, [slots]);
@@ -1202,7 +1213,7 @@ function StudioCRM({ onLogout }) {
     sessions.forEach((s) => {
       s.attendees.forEach((a) => {
         rows.push({
-          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 堂數時長: durationByKey(s.durationKey).label,
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 堂數時長: durationLabelFor(a.courseType, s.durationKey),
           課程類型: a.courseType, 上課方式: s.mode || "實體", 家庭: families.find((f) => f.id === a.familyId)?.familyName || "",
           學生: memberNameOnly(a), 出席狀態: a.attendance || "尚未記錄", 費用: a.fee || 0, 是否來自固定課程: s.virtual || s.fromTemplateId ? "是" : "否",
         });
@@ -1224,7 +1235,7 @@ function StudioCRM({ onLogout }) {
     slots.forEach((s) => {
       s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).forEach((a) => {
         rows.push({
-          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 堂數時長: durationByKey(s.durationKey).label,
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 堂數時長: durationLabelFor(a.courseType, s.durationKey),
           課程類型: a.courseType, 上課方式: s.mode || "實體", 出席狀態: a.attendance || "尚未記錄",
           費用: a.fee || 0, 繳費方式: a.paymentMode, 繳費狀態: attendeeStatusLabel(a),
         });
@@ -1369,7 +1380,7 @@ function StudioCRM({ onLogout }) {
                       )}
                       {items.slice(0, 5).map((it) => {
                         const ci = courseInfo(it.courseType || COURSE_TYPES[0].key);
-                        const names = it.attendees.map((a) => memberNameOnly(a)).join("、");
+                        const names = it.attendees.map((a) => displayNameWithLeave(a)).join("、");
                         return (
                           <div key={it.id} style={{ fontSize: 9.5, lineHeight: 1.25, background: ci.bg, color: ci.color, borderRadius: 4, padding: "1px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 2 }}>
                             {it.virtual && <Repeat size={8} />}
@@ -1402,7 +1413,7 @@ function StudioCRM({ onLogout }) {
                   <div key={session.id} style={{ border: `1px solid ${session.attendees.length ? ci.border : "#B7B7B7"}55`, borderStyle: session.attendees.length ? "solid" : "dashed", background: session.attendees.length ? ci.bg + "44" : "#F7F5EF", borderRadius: 10, padding: 10, marginBottom: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <Clock size={12} />{session.startTime}｜{durationByKey(session.durationKey).label}
+                        <Clock size={12} />{session.startTime}｜{durationLabelFor(session.courseType, session.durationKey)}
                         <span style={{ fontSize: 11, color: ci.color, fontWeight: 700 }}>{session.courseType || "不限"}</span>
                         <span style={{ fontSize: 10, color: "#8A8272", background: "#F2ECDE", padding: "1px 6px", borderRadius: 99 }}>{session.mode}</span>
                         {session.virtual && <span style={{ fontSize: 10, color: "#0F766E", display: "flex", alignItems: "center", gap: 2 }}><Repeat size={10} />固定課程</span>}
@@ -1476,7 +1487,7 @@ function StudioCRM({ onLogout }) {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name || t.courseType}</div>
                         <div style={{ fontSize: 12, color: "#5C5648", marginTop: 3 }}>
-                          {WEEKDAY_FULL[t.dayOfWeek]}｜{WEEK_PATTERNS.find((w) => w.key === t.weekPattern)?.label}｜{t.startTime}｜{durationByKey(t.durationKey).label}｜{t.mode}
+                          {WEEKDAY_FULL[t.dayOfWeek]}｜{WEEK_PATTERNS.find((w) => w.key === t.weekPattern)?.label}｜{t.startTime}｜{durationLabelFor(t.courseType, t.durationKey)}｜{t.mode}
                         </div>
                         <div style={{ fontSize: 12, color: "#8A8272", marginTop: 3 }}>
                           期間：{t.startDate || "—"} ～ {t.endDate || "持續進行"}
@@ -1798,7 +1809,7 @@ function StudioCRM({ onLogout }) {
                           <div key={it.id} style={{ display: "flex", gap: 4, marginBottom: 3 }}>
                             <div style={{ fontWeight: 700, lineHeight: 1.3, flexShrink: 0, width: 34 }}>{it.startTime}</div>
                             <div style={{ lineHeight: 1.3, overflow: "hidden", flex: 1 }}>
-                              {it.attendees.map((a) => memberNameOnly(a)).join("、")}
+                              {it.attendees.map((a) => displayNameWithLeave(a)).join("、")}
                             </div>
                           </div>
                         ))}
