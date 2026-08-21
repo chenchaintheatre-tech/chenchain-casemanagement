@@ -1246,10 +1246,16 @@ function StudioCRM({ onLogout }) {
     const isChinese = /^[\u4e00-\u9fff]+$/.test(fullName);
     return isChinese && fullName.length >= 2 ? fullName.slice(1) : fullName;
   };
+  // 家長類的成員姓名（如「海安家長」）通常不是「姓氏+名字」，不省略第一個字
+  const nameNoSurname = (a) => {
+    const full = memberNameOnly(a);
+    const relation = findMember(a.familyId, a.memberId)?.relation;
+    return relation === "家長" ? full : givenNameOnly(full);
+  };
 
   // 列印課表專用：姓名省略姓氏，並保留請假／線上標註
   const displayNameForPrint = (a, mode) => {
-    const name = givenNameOnly(memberNameOnly(a));
+    const name = nameNoSurname(a);
     const withMode = mode === "線上" ? `${name}(線)` : name;
     return a.attendance === "請假" ? `(${withMode})` : withMode;
   };
@@ -1282,10 +1288,14 @@ function StudioCRM({ onLogout }) {
     });
     const names = Object.keys(byMember);
     if (names.length === 0) return "";
+    const displayNameForFullName = (fullName) => {
+      const relation = fam.members.find((mm) => mm.name === fullName)?.relation;
+      return relation === "家長" ? fullName : givenNameOnly(fullName);
+    };
     let msg = `您好，跟您通知${m}月課表：\n`;
     names.forEach((name) => {
       const lines = byMember[name].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-      msg += `${givenNameOnly(name)}\n`;
+      msg += `${displayNameForFullName(name)}\n`;
       lines.forEach((l) => { msg += `${l.label}\n`; });
     });
     msg += `上課前會再通知您，如果需要請假也請提前跟我們說喔，謝謝您！`;
@@ -1301,7 +1311,7 @@ function StudioCRM({ onLogout }) {
     let total = 0;
     slots.forEach((s) => {
       s.attendees.filter((a) => a.familyId === reminderFamilyId && a.paymentMode === "單次" && !a.paid).forEach((a) => {
-        const name = givenNameOnly(memberNameOnly(a));
+        const name = nameNoSurname(a);
         if (!byMember[name]) byMember[name] = [];
         const d = new Date(s.date + "T00:00:00");
         const fee = a.fee || 0;
