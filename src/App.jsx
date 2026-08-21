@@ -922,6 +922,8 @@ function StudioCRM({ onLogout }) {
   const [recordsMonth, setRecordsMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [recordsShowAll, setRecordsShowAll] = useState(false);
   const [recordsExpanded, setRecordsExpanded] = useState(false);
+  const [statsExpanded, setStatsExpanded] = useState(false);
+  const [accountsOverviewExpanded, setAccountsOverviewExpanded] = useState(false);
   const [msgFamilyId, setMsgFamilyId] = useState("");
   const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgCopied, setMsgCopied] = useState(false);
@@ -1883,26 +1885,33 @@ function StudioCRM({ onLogout }) {
               })()}
             </div>
 
-            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16, overflowX: "auto" }}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>累計上課堂數（依成員與課程類型自動統計）</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 10 }}>
-                <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
-                  <th style={{ padding: "8px 6px" }}>家庭</th><th style={{ padding: "8px 6px" }}>成員</th><th style={{ padding: "8px 6px" }}>課程類型</th>
-                  <th style={{ padding: "8px 6px" }}>累計堂數</th><th style={{ padding: "8px 6px" }}>累計費用</th>
-                </tr></thead>
-                <tbody>
-                  {attendanceStats.map((r, idx) => { const ci = courseInfo(r.courseType); const fam = families.find((f) => f.id === r.familyId); const m = fam?.members.find((mm) => mm.id === r.memberId);
-                    return (<tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
-                      <td style={{ padding: "8px 6px" }}>{fam?.familyName || "—"}</td>
-                      <td style={{ padding: "8px 6px", fontWeight: 600 }}>{m?.name || "（已刪除）"}</td>
-                      <td style={{ padding: "8px 6px" }}><span style={{ background: ci.bg, color: ci.color, padding: "3px 9px", borderRadius: 99, fontWeight: 600 }}>{r.courseType}</span></td>
-                      <td style={{ padding: "8px 6px" }}>{r.unitSum} 堂（{r.sessionCount} 次）</td>
-                      <td style={{ padding: "8px 6px" }}>{money(r.feeSum)}</td>
-                    </tr>);
-                  })}
-                  {attendanceStats.length === 0 && <tr><td colSpan={5} style={{ padding: "12px 6px", color: "#9A9284" }}>尚無上課紀錄</td></tr>}
-                </tbody>
-              </table>
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+              <button onClick={() => setStatsExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>累計上課堂數（依成員與課程類型自動統計）</div>
+                {statsExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              {statsExpanded && (
+                <div style={{ overflowX: "auto", marginTop: 14 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                      <th style={{ padding: "8px 6px" }}>家庭</th><th style={{ padding: "8px 6px" }}>成員</th><th style={{ padding: "8px 6px" }}>課程類型</th>
+                      <th style={{ padding: "8px 6px" }}>累計堂數</th><th style={{ padding: "8px 6px" }}>累計費用</th>
+                    </tr></thead>
+                    <tbody>
+                      {attendanceStats.map((r, idx) => { const ci = courseInfo(r.courseType); const fam = families.find((f) => f.id === r.familyId); const m = fam?.members.find((mm) => mm.id === r.memberId);
+                        return (<tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                          <td style={{ padding: "8px 6px" }}>{fam?.familyName || "—"}</td>
+                          <td style={{ padding: "8px 6px", fontWeight: 600 }}>{m?.name || "（已刪除）"}</td>
+                          <td style={{ padding: "8px 6px" }}><span style={{ background: ci.bg, color: ci.color, padding: "3px 9px", borderRadius: 99, fontWeight: 600 }}>{r.courseType}</span></td>
+                          <td style={{ padding: "8px 6px" }}>{r.unitSum} 堂（{r.sessionCount} 次）</td>
+                          <td style={{ padding: "8px 6px" }}>{money(r.feeSum)}</td>
+                        </tr>);
+                      })}
+                      {attendanceStats.length === 0 && <tr><td colSpan={5} style={{ padding: "12px 6px", color: "#9A9284" }}>尚無上課紀錄</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
@@ -1954,27 +1963,34 @@ function StudioCRM({ onLogout }) {
               })()}
             </div>
 
-            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16, overflowX: "auto" }}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>家庭儲值帳戶總覽</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
-                  <th style={{ padding: "8px 6px" }}>家庭</th><th style={{ padding: "8px 6px" }}>單堂價格</th><th style={{ padding: "8px 6px" }}>剩餘堂數</th><th style={{ padding: "8px 6px" }}>最近儲值</th>
-                </tr></thead>
-                <tbody>
-                  {families.flatMap((f) => (f.storedAccounts || []).map((a) => ({ f, a }))).map(({ f, a }, idx) => {
-                    const last = (a.topUps || [])[a.topUps.length - 1];
-                    return (
-                      <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
-                        <td style={{ padding: "8px 6px", fontWeight: 600 }}>{f.familyName}</td>
-                        <td style={{ padding: "8px 6px" }}>{money(a.pricePerUnit)}</td>
-                        <td style={{ padding: "8px 6px", fontWeight: 700, color: (a.remainingUnits ?? 0) <= 0 ? "#B4302A" : "#2F7A3B" }}>{a.remainingUnits ?? 0} 堂</td>
-                        <td style={{ padding: "8px 6px" }}>{last ? `${last.date}｜${money(last.amount)}｜${last.method}${last.invoiced ? "（已開發票）" : ""}` : "—"}</td>
-                      </tr>
-                    );
-                  })}
-                  {families.every((f) => (f.storedAccounts || []).length === 0) && <tr><td colSpan={4} style={{ padding: "12px 6px", color: "#9A9284" }}>尚無儲值帳戶</td></tr>}
-                </tbody>
-              </table>
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+              <button onClick={() => setAccountsOverviewExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>家庭儲值帳戶總覽</div>
+                {accountsOverviewExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              {accountsOverviewExpanded && (
+                <div style={{ overflowX: "auto", marginTop: 14 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                      <th style={{ padding: "8px 6px" }}>家庭</th><th style={{ padding: "8px 6px" }}>單堂價格</th><th style={{ padding: "8px 6px" }}>剩餘堂數</th><th style={{ padding: "8px 6px" }}>最近儲值</th>
+                    </tr></thead>
+                    <tbody>
+                      {families.flatMap((f) => (f.storedAccounts || []).map((a) => ({ f, a }))).map(({ f, a }, idx) => {
+                        const last = (a.topUps || [])[a.topUps.length - 1];
+                        return (
+                          <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                            <td style={{ padding: "8px 6px", fontWeight: 600 }}>{f.familyName}</td>
+                            <td style={{ padding: "8px 6px" }}>{money(a.pricePerUnit)}</td>
+                            <td style={{ padding: "8px 6px", fontWeight: 700, color: (a.remainingUnits ?? 0) <= 0 ? "#B4302A" : "#2F7A3B" }}>{a.remainingUnits ?? 0} 堂</td>
+                            <td style={{ padding: "8px 6px" }}>{last ? `${last.date}｜${money(last.amount)}｜${last.method}${last.invoiced ? "（已開發票）" : ""}` : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                      {families.every((f) => (f.storedAccounts || []).length === 0) && <tr><td colSpan={4} style={{ padding: "12px 6px", color: "#9A9284" }}>尚無儲值帳戶</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
