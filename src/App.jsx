@@ -2360,7 +2360,10 @@ function StudioCRM({ onLogout }) {
                     const items = getDaySessions(ds);
                     return (
                       <td key={colIdx} style={{ border: "1px solid #ccc", height: printRowHeight, verticalAlign: "top", padding: 4, fontSize: 10.5, overflow: "hidden" }}>
-                        <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 3 }}>{d.getDate()}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 700, fontSize: 12.5 }}>{d.getDate()}</span>
+                          <span style={{ fontSize: 9, color: "#5C5648" }}>{staffList.find((s) => s.id === duties[ds])?.name || ""}</span>
+                        </div>
                         {items.map((it) => (
                           <div key={it.id} style={{ display: "flex", gap: 4, marginBottom: 3 }}>
                             <div style={{ fontWeight: 700, lineHeight: 1.3, flexShrink: 0, width: 34 }}>{it.startTime}</div>
