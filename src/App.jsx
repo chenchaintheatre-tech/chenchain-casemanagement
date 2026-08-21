@@ -1466,7 +1466,7 @@ function StudioCRM({ onLogout }) {
         }
       `}</style>
       <div className="app-screen-view" style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100%", color: "#2E2A22", padding: 20 }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1440, width: "100%", margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>圈戲創作工作室課程及個案管理系統</h1>
