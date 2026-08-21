@@ -922,6 +922,8 @@ function StudioCRM({ onLogout }) {
   const [msgFamilyId, setMsgFamilyId] = useState("");
   const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgCopied, setMsgCopied] = useState(false);
+  const [reminderFamilyId, setReminderFamilyId] = useState("");
+  const [reminderCopied, setReminderCopied] = useState(false);
   const [msgFamilySearch, setMsgFamilySearch] = useState("");
   const [printMode, setPrintMode] = useState(null); // null | 'calendar' | 'report'
   const [printReportData, setPrintReportData] = useState(null); // { title, tables: [{name, headers, rows}] }
@@ -1273,6 +1275,44 @@ function StudioCRM({ onLogout }) {
       lines.forEach((l) => { msg += `${l.label}\n`; });
     });
     msg += `上課前會再通知您，如果需要請假也請提前跟我們說喔，謝謝您！`;
+    return msg;
+  };
+
+  // 繳費提醒生成器：依家庭整理出所有單次繳費模式下尚未繳費的課程，並附上匯款資訊
+  const buildFamilyPaymentReminder = () => {
+    if (!reminderFamilyId) return "";
+    const fam = families.find((f) => f.id === reminderFamilyId);
+    if (!fam) return "";
+    const byMember = {};
+    let total = 0;
+    slots.forEach((s) => {
+      s.attendees.filter((a) => a.familyId === reminderFamilyId && a.paymentMode === "單次" && !a.paid).forEach((a) => {
+        const name = givenNameOnly(memberNameOnly(a));
+        if (!byMember[name]) byMember[name] = [];
+        const d = new Date(s.date + "T00:00:00");
+        const fee = a.fee || 0;
+        total += fee;
+        byMember[name].push({
+          label: `${d.getMonth() + 1}/${d.getDate()}(${weekdayShort(s.date)}) ${a.courseType} ${fee}元`,
+          sortKey: s.date + s.startTime,
+        });
+      });
+    });
+    const names = Object.keys(byMember);
+    if (names.length === 0) return "";
+    let msg = `您好，通知您待繳費用如下：\n`;
+    names.forEach((name) => {
+      const lines = byMember[name].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+      msg += `${name}\n`;
+      lines.forEach((l) => { msg += `${l.label}\n`; });
+      msg += `\n`;
+    });
+    msg += `總計：${total}元\n\n`;
+    msg += `以下為圈戲匯款資訊：\n`;
+    msg += `帳號：602-5401-88466\n`;
+    msg += `戶名：圈戲創作工作室  \n`;
+    msg += `           中國信託 大安分行（銀行代號822）\n`;
+    msg += `匯款後麻煩告知匯款帳號【末五碼】，以便我們查詢，謝謝您！`;
     return msg;
   };
   const attendeeStatusLabel = (a) => (a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
@@ -2031,6 +2071,45 @@ function StudioCRM({ onLogout }) {
                       onClick={() => { navigator.clipboard.writeText(message); setMsgCopied(true); setTimeout(() => setMsgCopied(false), 2000); }}
                     >
                       <Copy size={14} />{msgCopied ? "已複製！" : "複製訊息"}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {tab === "notify" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20, marginTop: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>繳費提醒生成器</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇家庭，自動整理出所有尚未繳費的課程金額，並附上匯款資訊，方便複製貼給家長。</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 240px" }}>
+                <Field label="選擇家庭">
+                  <select style={inputStyle} value={reminderFamilyId} onChange={(e) => { setReminderFamilyId(e.target.value); setReminderCopied(false); }}>
+                    <option value="">請選擇家庭</option>
+                    {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
+                  </select>
+                </Field>
+              </div>
+            </div>
+
+            {(() => {
+              const reminderMessage = buildFamilyPaymentReminder();
+              return (
+                <>
+                  <textarea
+                    readOnly
+                    value={reminderMessage || (reminderFamilyId ? "這個家庭目前沒有未繳費的課程。" : "請先選擇家庭。")}
+                    style={{ width: "100%", minHeight: 260, boxSizing: "border-box", padding: 12, borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, lineHeight: 1.6, fontFamily: "inherit", resize: "vertical", background: "#FBF8F1", color: "#2E2A22" }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                    <button
+                      style={btnPrimary}
+                      disabled={!reminderMessage}
+                      onClick={() => { navigator.clipboard.writeText(reminderMessage); setReminderCopied(true); setTimeout(() => setReminderCopied(false), 2000); }}
+                    >
+                      <Copy size={14} />{reminderCopied ? "已複製！" : "複製訊息"}
                     </button>
                   </div>
                 </>
