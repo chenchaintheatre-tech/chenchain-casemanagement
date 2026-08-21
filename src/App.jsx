@@ -942,6 +942,9 @@ function StudioCRM({ onLogout }) {
   const [attendeeEdit, setAttendeeEdit] = useState(null); // { session, attendee }
   const [templateModal, setTemplateModal] = useState(null);
   const [vacationModal, setVacationModal] = useState(false);
+  const [staffList, setStaffList] = useState([]);
+  const [duties, setDuties] = useState({});
+  const [newStaffName, setNewStaffName] = useState("");
   const [familySearch, setFamilySearch] = useState("");
   const [showBackToTop, setShowBackToTop] = useState(false);
   const familyRefs = useRef({});
@@ -966,7 +969,7 @@ function StudioCRM({ onLogout }) {
   const HISTORY_LIMIT = 20;
   const pushHistory = () => {
     setHistory((h) => {
-      const snapshot = { families, slots, templates, vacations };
+      const snapshot = { families, slots, templates, vacations, staffList, duties };
       const next = [...h, snapshot];
       return next.length > HISTORY_LIMIT ? next.slice(next.length - HISTORY_LIMIT) : next;
     });
@@ -979,6 +982,8 @@ function StudioCRM({ onLogout }) {
       setSlots(prev.slots);
       setTemplates(prev.templates);
       setVacations(prev.vacations || []);
+      setStaffList(prev.staffList || []);
+      setDuties(prev.duties || {});
       return h.slice(0, -1);
     });
   };
@@ -1020,6 +1025,8 @@ function StudioCRM({ onLogout }) {
       setTemplates(loadedTemplates); // 種子資料自動合併已關閉，避免覆蓋或還原使用者刪除過的資料
       setSlots(data?.value?.slots || []);
       setVacations(data?.value?.vacations || []);
+      setStaffList(data?.value?.staffList || []);
+      setDuties(data?.value?.duties || {});
       setSaveError("");
     } catch (e) {
       setSaveError("讀取資料失敗，請確認網路連線與資料庫設定");
@@ -1030,13 +1037,13 @@ function StudioCRM({ onLogout }) {
     (async () => { await loadFromServer(); setLoaded(true); })();
   }, [loadFromServer]);
 
-  const persist = useCallback(async (f, s, t, v) => {
+  const persist = useCallback(async (f, s, t, v, st, du) => {
     try {
-      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t, vacations: v }, updated_at: new Date().toISOString() });
+      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t, vacations: v, staffList: st, duties: du }, updated_at: new Date().toISOString() });
       setSaveError(error ? "儲存失敗，請稍後再試" : "");
     } catch (e) { setSaveError("儲存失敗，請稍後再試"); }
   }, []);
-  useEffect(() => { if (loaded) persist(families, slots, templates, vacations); }, [families, slots, templates, vacations, loaded]); // eslint-disable-line
+  useEffect(() => { if (loaded) persist(families, slots, templates, vacations, staffList, duties); }, [families, slots, templates, vacations, staffList, duties, loaded]); // eslint-disable-line
 
   /* ---------- 查找工具 ---------- */
   const findMember = (familyId, memberId) => families.find((f) => f.id === familyId)?.members.find((m) => m.id === memberId);
@@ -1082,6 +1089,26 @@ function StudioCRM({ onLogout }) {
 
   const addVacation = (v) => { pushHistory(); setVacations((prev) => [...prev, { id: uid(), ...v }]); };
   const deleteVacation = (id) => { pushHistory(); setVacations((prev) => prev.filter((v) => v.id !== id)); };
+
+  // 值班人員名單與每日值班指派
+  const addStaff = (name) => { pushHistory(); setStaffList((prev) => [...prev, { id: uid(), name }]); };
+  const removeStaff = (id) => {
+    pushHistory();
+    setStaffList((prev) => prev.filter((s) => s.id !== id));
+    setDuties((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((d) => { if (next[d] === id) delete next[d]; });
+      return next;
+    });
+  };
+  const setDutyForDate = (dateStr, staffId) => {
+    pushHistory();
+    setDuties((prev) => {
+      const next = { ...prev };
+      if (staffId) next[dateStr] = staffId; else delete next[dateStr];
+      return next;
+    });
+  };
   const addCancelledDate = (templateId, dateStr) => setTemplates((prev) => prev.map((t) => (t.id === templateId ? { ...t, cancelledDates: [...(t.cancelledDates || []), dateStr] } : t)));
 
   /* ---------- 產生某天的所有時段（真實 + 虛擬固定課程） ---------- */
@@ -1518,6 +1545,7 @@ function StudioCRM({ onLogout }) {
 
         {/* ---------------- 月曆排課 ---------------- */}
         {tab === "calendar" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
             <div style={{ flex: "2 1 560px", background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -1545,7 +1573,20 @@ function StudioCRM({ onLogout }) {
                     <div key={i} role="button" tabIndex={0} onClick={() => setSelectedDate(ds)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedDate(ds); }} style={{ boxSizing: "border-box", width: "100%", border: isSelected ? "2px solid #B4694A" : isToday ? "1px solid #B4694A" : "1px solid #EDE6D6", background: dayVacation && dayVacation.allDay ? "#F2ECE4" : isSelected ? "#FBEFE7" : "#fff", borderRadius: 10, padding: "5px 4px", minHeight: 130, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3, textAlign: "left" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 12, fontWeight: isToday ? 800 : 600 }}>{d.getDate()}</span>
-                        {conflictDate && <AlertTriangle size={11} color="#B4302A" />}
+                        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                          {conflictDate && <AlertTriangle size={11} color="#B4302A" />}
+                          <select
+                            value={duties[ds] || ""}
+                            onChange={(e) => setDutyForDate(ds, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            title="值班人員"
+                            style={{ fontSize: 8.5, maxWidth: 46, padding: "1px 1px", borderRadius: 4, border: "1px solid #DED5BF", background: "#FBF8F1", color: "#5C5648" }}
+                          >
+                            <option value="">值班</option>
+                            {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
                       </div>
                       {dayVacation && (
                         <div style={{ fontSize: 9.5, color: "#8A6D4B", fontWeight: 700, display: "flex", alignItems: "center", gap: 2 }}>
@@ -1642,6 +1683,24 @@ function StudioCRM({ onLogout }) {
                 );
               })}
             </div>
+          </div>
+
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>值班人員名單</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <input style={{ ...inputStyle, maxWidth: 240 }} placeholder="輸入姓名後按新增" value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newStaffName.trim()) { addStaff(newStaffName.trim()); setNewStaffName(""); } }} />
+              <button style={btnGhost} onClick={() => { if (newStaffName.trim()) { addStaff(newStaffName.trim()); setNewStaffName(""); } }}><Plus size={14} />新增</button>
+            </div>
+            {staffList.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未新增值班人員。</div>}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {staffList.map((s) => (
+                <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, background: "#F2ECDE", color: "#5C5648", padding: "6px 10px", borderRadius: 99, fontWeight: 600 }}>
+                  {s.name}
+                  <button onClick={() => removeStaff(s.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#B4302A", display: "flex" }}><X size={13} /></button>
+                </span>
+              ))}
+            </div>
+          </div>
           </div>
         )}
 
