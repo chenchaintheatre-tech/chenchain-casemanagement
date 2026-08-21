@@ -29,11 +29,17 @@ const durationByKey = (key) => DURATIONS.find((d) => d.key === key) || DURATIONS
 // 團體課不論時長一律以「1堂」計算儲值堂數（60分鐘或80分鐘都算一堂）
 const effectiveUnits = (courseType, durationKey) => (courseType === "團體課" ? 1 : durationByKey(durationKey).unit);
 // 團體課收費設定只顯示 60分鐘／80分鐘，且都以「1堂」標示（不論實際60或80分鐘，都算一堂課）
+// 雙人團體/手足課固定為60分鐘，只保留這一個選項
 const durationsForCourseType = (courseType) => {
   if (courseType === "團體課") {
     return [
       { key: "u1m60", unit: 1, minutes: 60, label: "1堂（60分鐘）" },
       { key: "u15m80", unit: 1.5, minutes: 80, label: "1堂（80分鐘）" },
+    ];
+  }
+  if (courseType === "雙人團體/手足課") {
+    return [
+      { key: "u1m60", unit: 1, minutes: 60, label: "1堂（60分鐘）" },
     ];
   }
   return DURATIONS;
