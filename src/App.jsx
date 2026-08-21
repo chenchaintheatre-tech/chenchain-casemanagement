@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy, ChevronDown, ChevronUp
 } from "lucide-react";
 
 /* =========================================================
@@ -916,6 +916,9 @@ function StudioCRM({ onLogout }) {
   const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [reportStudentKey, setReportStudentKey] = useState("");
   const [reportFamilyId, setReportFamilyId] = useState("");
+  const [billingFamilyId, setBillingFamilyId] = useState("");
+  const [billingExpandAccounts, setBillingExpandAccounts] = useState(false);
+  const [billingExpandSessions, setBillingExpandSessions] = useState(false);
   const [msgFamilyId, setMsgFamilyId] = useState("");
   const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgCopied, setMsgCopied] = useState(false);
@@ -1713,6 +1716,130 @@ function StudioCRM({ onLogout }) {
         {/* ---------------- 收費總覽 ---------------- */}
         {tab === "billing" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>個別家庭繳費查詢</div>
+                <select style={{ ...inputStyle, maxWidth: 260 }} value={billingFamilyId} onChange={(e) => { setBillingFamilyId(e.target.value); setBillingExpandAccounts(false); setBillingExpandSessions(false); }}>
+                  <option value="">請選擇家庭查看詳細繳費狀況</option>
+                  {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
+                </select>
+                {billingFamilyId && <button style={btnGhost} onClick={() => setBillingFamilyId("")}>返回總覽</button>}
+              </div>
+
+              {billingFamilyId && (() => {
+                const fam = families.find((f) => f.id === billingFamilyId);
+                if (!fam) return null;
+                const rows = [];
+                slots.forEach((s) => {
+                  s.attendees.filter((a) => a.familyId === billingFamilyId && a.paymentMode === "單次").forEach((a) => {
+                    rows.push({ sessionId: s.id, date: s.date, startTime: s.startTime, attendee: a });
+                  });
+                });
+                rows.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+                const totalFee = rows.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
+                const paidFee = rows.filter((r) => r.attendee.paid).reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
+                const unpaidRows = rows.filter((r) => !r.attendee.paid);
+                const accounts = fam.storedAccounts || [];
+                const totalRemainingUnits = accounts.reduce((sum, a) => sum + (a.remainingUnits ?? 0), 0);
+                const allTopUps = accounts.flatMap((a) => (a.topUps || []).map((t) => ({ ...t, account: a })));
+                const lastTopUp = allTopUps.sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+
+                return (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 13, color: "#8A8272", marginBottom: 10 }}>{fam.familyName}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 18 }}>
+                      <div style={{ background: "#EEF6EE", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 11, color: "#5C5648" }}>單次繳費已收</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: "#2F7A3B" }}>{money(paidFee)}</div>
+                      </div>
+                      <div style={{ background: unpaidRows.length ? "#FDECEC" : "#F3EEE0", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 11, color: "#5C5648" }}>單次繳費未收</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: unpaidRows.length ? "#B4302A" : "#5C5648" }}>{money(totalFee - paidFee)}</div>
+                        <div style={{ fontSize: 11, color: "#8A8272" }}>{unpaidRows.length} 堂未繳</div>
+                      </div>
+                      <div style={{ background: "#F3EEE0", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 11, color: "#5C5648" }}>儲值剩餘堂數</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: "#6D5B3E" }}>{totalRemainingUnits} 堂</div>
+                        <div style={{ fontSize: 11, color: "#8A8272" }}>{accounts.length} 個帳戶</div>
+                      </div>
+                      <div style={{ background: "#F3EEE0", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 11, color: "#5C5648" }}>最近儲值</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#6D5B3E" }}>{lastTopUp ? lastTopUp.date : "—"}</div>
+                        <div style={{ fontSize: 11, color: "#8A8272" }}>{lastTopUp ? `${money(lastTopUp.amount)}｜${lastTopUp.method}` : "尚無紀錄"}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ border: "1px solid #EDE6D6", borderRadius: 10, marginBottom: 10, overflow: "hidden" }}>
+                      <button onClick={() => setBillingExpandAccounts((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#FBF8F1", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                        <span><Wallet size={14} style={{ verticalAlign: -2, marginRight: 4 }} />儲值帳戶明細（{accounts.length}）</span>
+                        {billingExpandAccounts ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                      {billingExpandAccounts && (
+                        <div style={{ padding: 14 }}>
+                          {accounts.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>此家庭尚無儲值帳戶。</div>}
+                          {accounts.map((acc) => (
+                            <div key={acc.id} style={{ marginBottom: 14 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>單堂 {money(acc.pricePerUnit)}｜剩餘 {acc.remainingUnits ?? 0} 堂</div>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                                  <th style={{ padding: "6px 4px" }}>儲值日期</th><th style={{ padding: "6px 4px" }}>金額</th><th style={{ padding: "6px 4px" }}>增加堂數</th>
+                                  <th style={{ padding: "6px 4px" }}>付款方式</th><th style={{ padding: "6px 4px" }}>末五碼</th><th style={{ padding: "6px 4px" }}>發票</th>
+                                </tr></thead>
+                                <tbody>
+                                  {(acc.topUps || []).map((t, i) => (
+                                    <tr key={i} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                                      <td style={{ padding: "6px 4px" }}>{t.date}</td><td style={{ padding: "6px 4px" }}>{money(t.amount)}</td><td style={{ padding: "6px 4px" }}>{t.units}</td>
+                                      <td style={{ padding: "6px 4px" }}>{t.method}{t.method === "匯款" && t.last5 ? `（末五碼 ${t.last5}）` : ""}</td>
+                                      <td style={{ padding: "6px 4px" }}>{t.last5 || "—"}</td><td style={{ padding: "6px 4px" }}>{t.invoiced ? "已開立" : "未開立"}</td>
+                                    </tr>
+                                  ))}
+                                  {(acc.topUps || []).length === 0 && <tr><td colSpan={6} style={{ padding: "6px 4px", color: "#9A9284" }}>尚無儲值紀錄</td></tr>}
+                                </tbody>
+                              </table>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ border: "1px solid #EDE6D6", borderRadius: 10, overflow: "hidden" }}>
+                      <button onClick={() => setBillingExpandSessions((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#FBF8F1", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                        <span><DollarSign size={14} style={{ verticalAlign: -2, marginRight: 4 }} />單次繳費紀錄（{rows.length}）</span>
+                        {billingExpandSessions ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                      {billingExpandSessions && (
+                        <div style={{ padding: 14, overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                            <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                              <th style={{ padding: "6px 4px" }}>日期</th><th style={{ padding: "6px 4px" }}>學生</th><th style={{ padding: "6px 4px" }}>課程</th>
+                              <th style={{ padding: "6px 4px" }}>費用</th><th style={{ padding: "6px 4px" }}>繳費狀況</th><th style={{ padding: "6px 4px" }}>方式</th><th style={{ padding: "6px 4px" }}>操作</th>
+                            </tr></thead>
+                            <tbody>
+                              {rows.map((r, i) => (
+                                <tr key={i} style={{ borderBottom: "1px solid #F2ECDE", background: r.attendee.paid ? "transparent" : "#FDECEC" }}>
+                                  <td style={{ padding: "6px 4px" }}>{r.date} {r.startTime}</td>
+                                  <td style={{ padding: "6px 4px" }}>{memberNameOnly(r.attendee)}</td>
+                                  <td style={{ padding: "6px 4px" }}>{r.attendee.courseType}</td>
+                                  <td style={{ padding: "6px 4px" }}>{money(r.attendee.fee)}</td>
+                                  <td style={{ padding: "6px 4px", fontWeight: 700, color: r.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{r.attendee.paid ? `已繳（${r.attendee.paidDate || ""}）` : "未繳"}</td>
+                                  <td style={{ padding: "6px 4px" }}>{r.attendee.paid ? `${r.attendee.method}${r.attendee.method === "匯款" && r.attendee.last5 ? `（${r.attendee.last5}）` : ""}` : "—"}</td>
+                                  <td style={{ padding: "6px 4px" }}>
+                                    <button style={{ ...btnGhost, ...btnSm }} onClick={() => setPaymentEdit({ session: slots.find((s) => s.id === r.sessionId), attendee: r.attendee })}>編輯</button>
+                                  </td>
+                                </tr>
+                              ))}
+                              {rows.length === 0 && <tr><td colSpan={7} style={{ padding: "8px 4px", color: "#9A9284" }}>尚無單次繳費紀錄</td></tr>}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16, overflowX: "auto" }}>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>累計上課堂數（依成員與課程類型自動統計）</div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 10 }}>
