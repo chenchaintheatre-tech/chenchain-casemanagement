@@ -924,6 +924,7 @@ function StudioCRM({ onLogout }) {
   const [recordsExpanded, setRecordsExpanded] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [accountsOverviewExpanded, setAccountsOverviewExpanded] = useState(false);
+  const [endedTemplatesExpanded, setEndedTemplatesExpanded] = useState(false);
   const [msgFamilyId, setMsgFamilyId] = useState("");
   const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgCopied, setMsgCopied] = useState(false);
@@ -1627,42 +1628,75 @@ function StudioCRM({ onLogout }) {
         )}
 
         {/* ---------------- 固定課程 ---------------- */}
-        {tab === "recurring" && (
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>固定課程樣板（{templates.length}）</div>
-              <button style={btnPrimary} onClick={() => setTemplateModal("new")}><Plus size={14} />新增固定課程</button>
-            </div>
-            <div style={{ fontSize: 12, color: "#8A8272", marginBottom: 14 }}>月曆會自動依頻率帶入固定課程；若需調整或取消單次，至月曆該日編輯即可，不影響其餘週次。</div>
-            {templates.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未設定固定課程。</div>}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {templates.map((t) => {
-                const ci = courseInfo(t.courseType);
-                return (
-                  <div key={t.id} style={{ border: `1px solid ${ci.border}55`, background: ci.bg + "33", borderRadius: 12, padding: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name || t.courseType}</div>
-                        <div style={{ fontSize: 12, color: "#5C5648", marginTop: 3 }}>
-                          {WEEKDAY_FULL[t.dayOfWeek]}｜{WEEK_PATTERNS.find((w) => w.key === t.weekPattern)?.label}｜{t.startTime}｜{durationLabelFor(t.courseType, t.durationKey)}｜{t.mode}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#8A8272", marginTop: 3 }}>
-                          期間：{t.startDate || "—"} ～ {t.endDate || "持續進行"}
-                          {t.endDate && t.endDate < todayStr() && <span style={{ color: "#B4302A", fontWeight: 700 }}>（已結束）</span>}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#8A8272", marginTop: 3 }}>學員：{t.attendees.map((a) => memberNameOnly(a)).join("、") || "尚未設定"}</div>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button style={btnGhost} onClick={() => setTemplateModal(t)}><Edit3 size={13} />編輯</button>
-                        <button style={btnDanger} onClick={() => deleteTemplate(t.id)}><Trash2 size={13} /></button>
-                      </div>
+        {tab === "recurring" && (() => {
+          const isEnded = (t) => t.endDate && t.endDate < todayStr();
+          const activeTemplates = templates.filter((t) => !isEnded(t));
+          const endedTemplates = templates.filter(isEnded);
+          const columns = Array.from({ length: 7 }, () => []);
+          activeTemplates.forEach((t) => {
+            const colIdx = (t.dayOfWeek + 6) % 7;
+            columns[colIdx].push(t);
+          });
+          columns.forEach((col) => col.sort((a, b) => a.startTime.localeCompare(b.startTime)));
+
+          const renderCard = (t) => {
+            const ci = courseInfo(t.courseType);
+            return (
+              <div key={t.id} style={{ border: `1px solid ${ci.border}55`, background: ci.bg + "33", borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{t.name || t.courseType}</div>
+                <div style={{ fontSize: 11.5, color: "#5C5648", marginTop: 3 }}>
+                  {WEEK_PATTERNS.find((w) => w.key === t.weekPattern)?.label}｜{t.startTime}｜{durationLabelFor(t.courseType, t.durationKey)}｜{t.mode}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 3 }}>
+                  期間：{t.startDate || "—"} ～ {t.endDate || "持續進行"}
+                  {isEnded(t) && <span style={{ color: "#B4302A", fontWeight: 700 }}>（已結束）</span>}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 3 }}>學員：{t.attendees.map((a) => memberNameOnly(a)).join("、") || "尚未設定"}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <button style={{ ...btnGhost, ...btnSm }} onClick={() => setTemplateModal(t)}><Edit3 size={12} />編輯</button>
+                  <button style={{ ...btnDanger, ...btnSm }} onClick={() => deleteTemplate(t.id)}><Trash2 size={12} /></button>
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>固定課程樣板（{activeTemplates.length}）</div>
+                  <button style={btnPrimary} onClick={() => setTemplateModal("new")}><Plus size={14} />新增固定課程</button>
+                </div>
+                <div style={{ fontSize: 12, color: "#8A8272", marginBottom: 14 }}>月曆會自動依頻率帶入固定課程；若需調整或取消單次，至月曆該日編輯即可，不影響其餘週次。</div>
+                {activeTemplates.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未設定固定課程。</div>}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(150px, 1fr))", gap: 10, overflowX: "auto" }}>
+                  {WEEKDAYS.map((w, colIdx) => (
+                    <div key={w}>
+                      <div style={{ textAlign: "center", fontWeight: 700, fontSize: 13, color: "#5C5648", background: "#F2ECDE", borderRadius: 8, padding: "6px 0", marginBottom: 8 }}>週{w}</div>
+                      {columns[colIdx].map((t) => renderCard(t))}
+                      {columns[colIdx].length === 0 && <div style={{ fontSize: 11, color: "#B7B0A0", textAlign: "center" }}>—</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+                <button onClick={() => setEndedTemplatesExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>已結束的固定課（{endedTemplates.length}）</div>
+                  {endedTemplatesExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
+                {endedTemplatesExpanded && (
+                  <div style={{ marginTop: 14 }}>
+                    {endedTemplates.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>目前沒有已結束的固定課程。</div>}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {endedTemplates.map((t) => renderCard(t))}
                     </div>
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ---------------- 家庭與學生 ---------------- */}
         {tab === "families" && (
