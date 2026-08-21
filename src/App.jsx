@@ -1247,6 +1247,13 @@ function StudioCRM({ onLogout }) {
     return isChinese && fullName.length >= 2 ? fullName.slice(1) : fullName;
   };
 
+  // 列印課表專用：姓名省略姓氏，並保留請假／線上標註
+  const displayNameForPrint = (a, mode) => {
+    const name = givenNameOnly(memberNameOnly(a));
+    const withMode = mode === "線上" ? `${name}(線)` : name;
+    return a.attendance === "請假" ? `(${withMode})` : withMode;
+  };
+
   // 每月課程表通知訊息生成器：依家庭與月份，整理出每位上課者當月的課表文字
   const addMinutesToTime = (timeStr, minutes) => {
     const [h, mi] = timeStr.split(":").map(Number);
@@ -2289,7 +2296,7 @@ function StudioCRM({ onLogout }) {
                           <div key={it.id} style={{ display: "flex", gap: 4, marginBottom: 3 }}>
                             <div style={{ fontWeight: 700, lineHeight: 1.3, flexShrink: 0, width: 34 }}>{it.startTime}</div>
                             <div style={{ lineHeight: 1.3, overflow: "hidden", flex: 1 }}>
-                              {it.attendees.map((a) => displayNameWithLeave(a, it.mode)).join("、")}
+                              {it.attendees.map((a) => displayNameForPrint(a, it.mode)).join("、")}
                             </div>
                           </div>
                         ))}
