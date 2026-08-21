@@ -1047,10 +1047,11 @@ function StudioCRM({ onLogout }) {
     return m ? `${fam.familyName}・${m.name}` : "（成員已刪除）";
   };
   const memberNameOnly = (a) => findMember(a.familyId, a.memberId)?.name || "（已刪除）";
-  // 請假的學員在月曆上以括號標示姓名，方便辨識
-  const displayNameWithLeave = (a) => {
+  // 請假的學員在月曆上以括號標示姓名；線上課則在姓名後加註「(線)」
+  const displayNameWithLeave = (a, mode) => {
     const name = memberNameOnly(a);
-    return a.attendance === "請假" ? `(${name})` : name;
+    const withMode = mode === "線上" ? `${name}(線)` : name;
+    return a.attendance === "請假" ? `(${withMode})` : withMode;
   };
 
   const adjustStoredAccount = (familyId, accountId, delta) => {
@@ -1536,7 +1537,7 @@ function StudioCRM({ onLogout }) {
                       )}
                       {items.slice(0, 5).map((it) => {
                         const ci = courseInfo(it.courseType || COURSE_TYPES[0].key);
-                        const names = it.attendees.map((a) => displayNameWithLeave(a)).join("、");
+                        const names = it.attendees.map((a) => displayNameWithLeave(a, it.mode)).join("、");
                         return (
                           <div key={it.id} style={{ fontSize: 9.5, lineHeight: 1.25, background: ci.bg, color: ci.color, borderRadius: 4, padding: "1px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 2 }}>
                             {it.virtual && <Repeat size={8} />}
@@ -2288,7 +2289,7 @@ function StudioCRM({ onLogout }) {
                           <div key={it.id} style={{ display: "flex", gap: 4, marginBottom: 3 }}>
                             <div style={{ fontWeight: 700, lineHeight: 1.3, flexShrink: 0, width: 34 }}>{it.startTime}</div>
                             <div style={{ lineHeight: 1.3, overflow: "hidden", flex: 1 }}>
-                              {it.attendees.map((a) => displayNameWithLeave(a)).join("、")}
+                              {it.attendees.map((a) => displayNameWithLeave(a, it.mode)).join("、")}
                             </div>
                           </div>
                         ))}
