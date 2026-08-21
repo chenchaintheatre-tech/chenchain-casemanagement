@@ -919,6 +919,9 @@ function StudioCRM({ onLogout }) {
   const [billingFamilyId, setBillingFamilyId] = useState("");
   const [billingExpandAccounts, setBillingExpandAccounts] = useState(false);
   const [billingExpandSessions, setBillingExpandSessions] = useState(false);
+  const [recordsMonth, setRecordsMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
+  const [recordsShowAll, setRecordsShowAll] = useState(false);
+  const [recordsExpanded, setRecordsExpanded] = useState(false);
   const [msgFamilyId, setMsgFamilyId] = useState("");
   const [msgMonth, setMsgMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgCopied, setMsgCopied] = useState(false);
@@ -1902,34 +1905,53 @@ function StudioCRM({ onLogout }) {
               </table>
             </div>
 
-            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16, overflowX: "auto" }}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>單次繳費紀錄</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
-                  <th style={{ padding: "8px 6px" }}>上課日期</th><th style={{ padding: "8px 6px" }}>成員</th><th style={{ padding: "8px 6px" }}>課程</th>
-                  <th style={{ padding: "8px 6px" }}>出席狀況</th>
-                  <th style={{ padding: "8px 6px" }}>費用</th><th style={{ padding: "8px 6px" }}>繳費狀況</th><th style={{ padding: "8px 6px" }}>付款方式</th>
-                  <th style={{ padding: "8px 6px" }}>發票</th><th style={{ padding: "8px 6px" }}>操作</th>
-                </tr></thead>
-                <tbody>
-                  {perSessionRows.map((row, idx) => (
-                    <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
-                      <td style={{ padding: "8px 6px" }}>{row.date} {row.startTime}</td>
-                      <td style={{ padding: "8px 6px" }}>{memberLabel(row.attendee)}</td>
-                      <td style={{ padding: "8px 6px" }}>{row.courseType}</td>
-                      <td style={{ padding: "8px 6px", fontWeight: 700, color: attendanceColor(row.attendee.attendance) }}>{row.attendee.attendance || "尚未記錄"}</td>
-                      <td style={{ padding: "8px 6px" }}>{money(row.attendee.fee)}</td>
-                      <td style={{ padding: "8px 6px", fontWeight: 700, color: row.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{row.attendee.paid ? `已繳（${row.attendee.paidDate || ""}）` : "未繳"}</td>
-                      <td style={{ padding: "8px 6px" }}>{row.attendee.paid ? `${row.attendee.method}${row.attendee.method === "匯款" && row.attendee.last5 ? `（末五碼 ${row.attendee.last5}）` : ""}` : "—"}</td>
-                      <td style={{ padding: "8px 6px" }}>{row.attendee.invoiced ? "已開立" : "未開立"}</td>
-                      <td style={{ padding: "8px 6px" }}>
-                        <button style={{ ...btnGhost, ...btnSm }} onClick={() => setPaymentEdit({ session: slots.find((s) => s.id === row.sessionId), attendee: row.attendee })}>編輯繳費</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {perSessionRows.length === 0 && <tr><td colSpan={9} style={{ padding: "12px 6px", color: "#9A9284" }}>尚無單次繳費紀錄</td></tr>}
-                </tbody>
-              </table>
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+              <button onClick={() => setRecordsExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>單次繳費紀錄</div>
+                {recordsExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              {recordsExpanded && (() => {
+                const filteredRows = recordsShowAll ? perSessionRows : perSessionRows.filter((row) => row.date.slice(0, 7) === recordsMonth);
+                return (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                      <input type="month" style={{ ...inputStyle, maxWidth: 180 }} value={recordsMonth} onChange={(e) => setRecordsMonth(e.target.value)} disabled={recordsShowAll} />
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                        <input type="checkbox" checked={recordsShowAll} onChange={(e) => setRecordsShowAll(e.target.checked)} />顯示全部月份
+                      </label>
+                      <span style={{ fontSize: 12, color: "#9A9284" }}>共 {filteredRows.length} 筆</span>
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                          <th style={{ padding: "8px 6px" }}>上課日期</th><th style={{ padding: "8px 6px" }}>成員</th><th style={{ padding: "8px 6px" }}>課程</th>
+                          <th style={{ padding: "8px 6px" }}>出席狀況</th>
+                          <th style={{ padding: "8px 6px" }}>費用</th><th style={{ padding: "8px 6px" }}>繳費狀況</th><th style={{ padding: "8px 6px" }}>付款方式</th>
+                          <th style={{ padding: "8px 6px" }}>發票</th><th style={{ padding: "8px 6px" }}>操作</th>
+                        </tr></thead>
+                        <tbody>
+                          {filteredRows.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                              <td style={{ padding: "8px 6px" }}>{row.date} {row.startTime}</td>
+                              <td style={{ padding: "8px 6px" }}>{memberLabel(row.attendee)}</td>
+                              <td style={{ padding: "8px 6px" }}>{row.courseType}</td>
+                              <td style={{ padding: "8px 6px", fontWeight: 700, color: attendanceColor(row.attendee.attendance) }}>{row.attendee.attendance || "尚未記錄"}</td>
+                              <td style={{ padding: "8px 6px" }}>{money(row.attendee.fee)}</td>
+                              <td style={{ padding: "8px 6px", fontWeight: 700, color: row.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{row.attendee.paid ? `已繳（${row.attendee.paidDate || ""}）` : "未繳"}</td>
+                              <td style={{ padding: "8px 6px" }}>{row.attendee.paid ? `${row.attendee.method}${row.attendee.method === "匯款" && row.attendee.last5 ? `（末五碼 ${row.attendee.last5}）` : ""}` : "—"}</td>
+                              <td style={{ padding: "8px 6px" }}>{row.attendee.invoiced ? "已開立" : "未開立"}</td>
+                              <td style={{ padding: "8px 6px" }}>
+                                <button style={{ ...btnGhost, ...btnSm }} onClick={() => setPaymentEdit({ session: slots.find((s) => s.id === row.sessionId), attendee: row.attendee })}>編輯繳費</button>
+                              </td>
+                            </tr>
+                          ))}
+                          {filteredRows.length === 0 && <tr><td colSpan={9} style={{ padding: "12px 6px", color: "#9A9284" }}>這個月沒有單次繳費紀錄</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16, overflowX: "auto" }}>
