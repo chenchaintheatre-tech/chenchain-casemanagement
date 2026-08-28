@@ -1344,7 +1344,7 @@ function StudioCRM({ onLogout }) {
     const byMember = {};
     let total = 0;
     slots.forEach((s) => {
-      s.attendees.filter((a) => a.familyId === reminderFamilyId && a.paymentMode === "單次" && !a.paid).forEach((a) => {
+      s.attendees.filter((a) => a.familyId === reminderFamilyId && a.paymentMode === "單次" && !a.paid && a.attendance !== "請假").forEach((a) => {
         const name = nameNoSurname(a);
         if (!byMember[name]) byMember[name] = [];
         const d = new Date(s.date + "T00:00:00");
@@ -1373,7 +1373,7 @@ function StudioCRM({ onLogout }) {
     msg += `匯款後麻煩告知匯款帳號【末五碼】，以便我們查詢，謝謝您！`;
     return msg;
   };
-  const attendeeStatusLabel = (a) => (a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
+  const attendeeStatusLabel = (a) => (a.attendance === "請假" ? "不計費" : a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
   const downloadSheet = (sheets, filename) => {
     const wb = XLSX.utils.book_new();
     sheets.forEach(({ name, rows, isAoa }) => {
@@ -1397,9 +1397,11 @@ function StudioCRM({ onLogout }) {
     let totalFee = 0, paidFee = 0;
     sessions.forEach((s) => {
       s.attendees.forEach((a) => {
-        totalFee += a.fee || 0;
-        const isPaid = a.paymentMode === "儲值" ? !!a.deducted : !!a.paid;
-        if (isPaid) paidFee += a.fee || 0;
+        if (a.attendance !== "請假") {
+          totalFee += a.fee || 0;
+          const isPaid = a.paymentMode === "儲值" ? !!a.deducted : !!a.paid;
+          if (isPaid) paidFee += a.fee || 0;
+        }
         rows.push({
           日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime, 家庭: families.find((f) => f.id === a.familyId)?.familyName || "",
           學生: memberNameOnly(a), 課程類型: a.courseType, 費用: a.fee || 0, 繳費方式: a.paymentMode, 繳費狀態: attendeeStatusLabel(a),
@@ -1450,7 +1452,7 @@ function StudioCRM({ onLogout }) {
       });
     });
     rows.sort((a, b) => (a.日期 + a.時間).localeCompare(b.日期 + b.時間));
-    const totalFee = rows.reduce((sum, r) => sum + r.費用, 0);
+    const totalFee = rows.filter((r) => r.出席狀態 !== "請假").reduce((sum, r) => sum + r.費用, 0);
     const sessionCount = slots.reduce((n, s) => n + s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).length, 0);
     const summaryRows = [...rows, {}, { 日期: "累計堂數", 星期: `${sessionCount} 次` }, { 日期: "累計費用", 費用: totalFee }];
     const title = `${fam?.familyName || ""}_${member?.name || "學生"}_課程明細`;
@@ -1476,7 +1478,7 @@ function StudioCRM({ onLogout }) {
       });
     });
     sessionRows.sort((a, b) => (a.日期 + a.時間).localeCompare(b.日期 + b.時間));
-    const totalFee = sessionRows.reduce((sum, r) => sum + r.費用, 0);
+    const totalFee = sessionRows.filter((r) => r.繳費狀態 !== "不計費").reduce((sum, r) => sum + r.費用, 0);
     const sessionSummaryRows = [...sessionRows, {}, { 日期: "累計費用", 費用: totalFee }];
 
     const accountHeaders = ["單堂價格", "剩餘堂數", "儲值日期", "儲值金額", "增加堂數", "付款方式", "末五碼", "發票"];
@@ -1499,6 +1501,53 @@ function StudioCRM({ onLogout }) {
     doPrint(b.title, [
       { name: "上課與繳費明細", headers: b.sessionHeaders, rows: b.sessionSummaryRows },
       { name: "儲值帳戶紀錄", headers: b.accountHeaders, rows: b.accountRowsOrEmpty },
+    ]);
+  };
+
+  // 報表五：家長課上課統計
+  const buildParentClassStats = () => {
+    const [y, m] = reportMonth.split("-").map(Number);
+    const sessions = getMonthSessions(y, m - 1);
+    const detailHeaders = ["日期", "星期", "時間", "家庭", "家長姓名", "出席狀態", "費用"];
+    const detailRows = [];
+    sessions.forEach((s) => {
+      s.attendees.filter((a) => a.courseType === "家長課").forEach((a) => {
+        detailRows.push({
+          日期: s.date, 星期: weekdayOf(s.date), 時間: s.startTime,
+          家庭: families.find((f) => f.id === a.familyId)?.familyName || "",
+          家長姓名: memberNameOnly(a), 出席狀態: a.attendance || "尚未記錄", 費用: a.fee || 0,
+        });
+      });
+    });
+    detailRows.sort((r1, r2) => (r1.日期 + r1.時間).localeCompare(r2.日期 + r2.時間));
+
+    const summaryMap = {};
+    detailRows.forEach((r) => {
+      const key = `${r.家庭}__${r.家長姓名}`;
+      if (!summaryMap[key]) summaryMap[key] = { 家庭: r.家庭, 家長姓名: r.家長姓名, 出席堂數: 0, 請假堂數: 0, 缺席堂數: 0, 費用小計: 0 };
+      if (r.出席狀態 === "出席") summaryMap[key].出席堂數 += 1;
+      else if (r.出席狀態 === "請假") summaryMap[key].請假堂數 += 1;
+      else if (r.出席狀態 === "缺席") summaryMap[key].缺席堂數 += 1;
+      summaryMap[key].費用小計 += r.費用;
+    });
+    const summaryHeaders = ["家庭", "家長姓名", "出席堂數", "請假堂數", "缺席堂數", "費用小計"];
+    const summaryRows = Object.values(summaryMap).sort((r1, r2) => r1.家庭.localeCompare(r2.家庭));
+
+    const title = `${y}年${m}月家長課上課統計`;
+    return { title, filename: `${y}-${pad(m)}_家長課上課統計.xlsx`, summaryHeaders, summaryRows, detailHeaders, detailRows };
+  };
+  const exportParentClassStats = () => {
+    const b = buildParentClassStats();
+    downloadSheet([
+      { name: "統計摘要", rows: b.summaryRows.length ? b.summaryRows : [{ 家庭: "（本月無家長課紀錄）" }] },
+      { name: "上課明細", rows: b.detailRows.length ? b.detailRows : [{ 日期: "（本月無家長課紀錄）" }] },
+    ], b.filename);
+  };
+  const printParentClassStats = () => {
+    const b = buildParentClassStats();
+    doPrint(b.title, [
+      { name: "統計摘要", headers: b.summaryHeaders, rows: b.summaryRows },
+      { name: "上課明細", headers: b.detailHeaders, rows: b.detailRows },
     ]);
   };
 
@@ -1900,9 +1949,10 @@ function StudioCRM({ onLogout }) {
                   });
                 });
                 rows.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-                const totalFee = rows.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
-                const paidFee = rows.filter((r) => r.attendee.paid).reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
-                const unpaidRows = rows.filter((r) => !r.attendee.paid);
+                const billableRows = rows.filter((r) => r.attendee.attendance !== "請假");
+                const totalFee = billableRows.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
+                const paidFee = billableRows.filter((r) => r.attendee.paid).reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
+                const unpaidRows = billableRows.filter((r) => !r.attendee.paid);
                 const accounts = fam.storedAccounts || [];
                 const totalRemainingUnits = accounts.reduce((sum, a) => sum + (a.remainingUnits ?? 0), 0);
                 const allTopUps = accounts.flatMap((a) => (a.topUps || []).map((t) => ({ ...t, account: a })));
@@ -1979,19 +2029,22 @@ function StudioCRM({ onLogout }) {
                               <th style={{ padding: "6px 4px" }}>費用</th><th style={{ padding: "6px 4px" }}>繳費狀況</th><th style={{ padding: "6px 4px" }}>方式</th><th style={{ padding: "6px 4px" }}>操作</th>
                             </tr></thead>
                             <tbody>
-                              {rows.map((r, i) => (
-                                <tr key={i} style={{ borderBottom: "1px solid #F2ECDE", background: r.attendee.paid ? "transparent" : "#FDECEC" }}>
+                              {rows.map((r, i) => {
+                                const isLeave = r.attendee.attendance === "請假";
+                                return (
+                                <tr key={i} style={{ borderBottom: "1px solid #F2ECDE", background: isLeave ? "transparent" : r.attendee.paid ? "transparent" : "#FDECEC" }}>
                                   <td style={{ padding: "6px 4px" }}>{r.date} {r.startTime}</td>
                                   <td style={{ padding: "6px 4px" }}>{memberNameOnly(r.attendee)}</td>
                                   <td style={{ padding: "6px 4px" }}>{r.attendee.courseType}</td>
                                   <td style={{ padding: "6px 4px" }}>{money(r.attendee.fee)}</td>
-                                  <td style={{ padding: "6px 4px", fontWeight: 700, color: r.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{r.attendee.paid ? `已繳（${r.attendee.paidDate || ""}）` : "未繳"}</td>
+                                  <td style={{ padding: "6px 4px", fontWeight: 700, color: isLeave ? "#1a1a1a" : r.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{isLeave ? "不計費" : r.attendee.paid ? `已繳（${r.attendee.paidDate || ""}）` : "未繳"}</td>
                                   <td style={{ padding: "6px 4px" }}>{r.attendee.paid ? `${r.attendee.method}${r.attendee.method === "匯款" && r.attendee.last5 ? `（${r.attendee.last5}）` : ""}` : "—"}</td>
                                   <td style={{ padding: "6px 4px" }}>
                                     <button style={{ ...btnGhost, ...btnSm }} onClick={() => setPaymentEdit({ session: slots.find((s) => s.id === r.sessionId), attendee: r.attendee })}>編輯</button>
                                   </td>
                                 </tr>
-                              ))}
+                                );
+                              })}
                               {rows.length === 0 && <tr><td colSpan={7} style={{ padding: "8px 4px", color: "#9A9284" }}>尚無單次繳費紀錄</td></tr>}
                             </tbody>
                           </table>
@@ -2005,11 +2058,11 @@ function StudioCRM({ onLogout }) {
 
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
               <button onClick={() => setUnpaidExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>未繳費總覽（{perSessionRows.filter((r) => !r.attendee.paid).length}）</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>未繳費總覽（{perSessionRows.filter((r) => !r.attendee.paid && r.attendee.attendance !== "請假").length}）</div>
                 {unpaidExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
               {unpaidExpanded && (() => {
-                const unpaidAll = perSessionRows.filter((r) => !r.attendee.paid).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+                const unpaidAll = perSessionRows.filter((r) => !r.attendee.paid && r.attendee.attendance !== "請假").sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
                 const unpaidTotal = unpaidAll.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
                 return (
                   <div style={{ marginTop: 14 }}>
@@ -2096,21 +2149,24 @@ function StudioCRM({ onLogout }) {
                           <th style={{ padding: "8px 6px" }}>發票</th><th style={{ padding: "8px 6px" }}>操作</th>
                         </tr></thead>
                         <tbody>
-                          {filteredRows.map((row, idx) => (
+                          {filteredRows.map((row, idx) => {
+                            const isLeave = row.attendee.attendance === "請假";
+                            return (
                             <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
                               <td style={{ padding: "8px 6px" }}>{row.date} {row.startTime}</td>
                               <td style={{ padding: "8px 6px" }}>{memberLabel(row.attendee)}</td>
                               <td style={{ padding: "8px 6px" }}>{row.courseType}</td>
                               <td style={{ padding: "8px 6px", fontWeight: 700, color: attendanceColor(row.attendee.attendance) }}>{row.attendee.attendance || "尚未記錄"}</td>
                               <td style={{ padding: "8px 6px" }}>{money(row.attendee.fee)}</td>
-                              <td style={{ padding: "8px 6px", fontWeight: 700, color: row.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{row.attendee.paid ? `已繳（${row.attendee.paidDate || ""}）` : "未繳"}</td>
+                              <td style={{ padding: "8px 6px", fontWeight: 700, color: isLeave ? "#1a1a1a" : row.attendee.paid ? "#2F7A3B" : "#B4302A" }}>{isLeave ? "不計費" : row.attendee.paid ? `已繳（${row.attendee.paidDate || ""}）` : "未繳"}</td>
                               <td style={{ padding: "8px 6px" }}>{row.attendee.paid ? `${row.attendee.method}${row.attendee.method === "匯款" && row.attendee.last5 ? `（末五碼 ${row.attendee.last5}）` : ""}` : "—"}</td>
                               <td style={{ padding: "8px 6px" }}>{row.attendee.invoiced ? "已開立" : "未開立"}</td>
                               <td style={{ padding: "8px 6px" }}>
                                 <button style={{ ...btnGhost, ...btnSm }} onClick={() => setPaymentEdit({ session: slots.find((s) => s.id === row.sessionId), attendee: row.attendee })}>編輯繳費</button>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                           {filteredRows.length === 0 && <tr><td colSpan={9} style={{ padding: "12px 6px", color: "#9A9284" }}>這個月沒有單次繳費紀錄</td></tr>}
                         </tbody>
                       </table>
@@ -2208,6 +2264,17 @@ function StudioCRM({ onLogout }) {
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportFamilyDetail} disabled={!reportFamilyId}><FileSpreadsheet size={14} />匯出 Excel</button>
                   <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={printFamilyDetail} disabled={!reportFamilyId}><Printer size={14} />列印</button>
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>家長課上課統計</div>
+                <Field label="月份">
+                  <input type="month" style={inputStyle} value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} />
+                </Field>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportParentClassStats}><FileSpreadsheet size={14} />匯出 Excel</button>
+                  <button style={{ ...btnGhost, flex: 1, justifyContent: "center" }} onClick={printParentClassStats}><Printer size={14} />列印</button>
                 </div>
               </div>
 
