@@ -1530,14 +1530,17 @@ function StudioCRM({ onLogout }) {
     const summaryMap = {};
     detailRows.forEach((r) => {
       const key = `${r.家庭}__${r.家長姓名}`;
-      if (!summaryMap[key]) summaryMap[key] = { 家庭: r.家庭, 家長姓名: r.家長姓名, 出席堂數: 0, 請假堂數: 0, 缺席堂數: 0, 費用小計: 0 };
+      if (!summaryMap[key]) summaryMap[key] = { 家庭: r.家庭, 家長姓名: r.家長姓名, 出席堂數: 0, 請假堂數: 0, 缺席堂數: 0, 上課日期: [] };
       if (r.出席狀態 === "出席") summaryMap[key].出席堂數 += 1;
       else if (r.出席狀態 === "請假") summaryMap[key].請假堂數 += 1;
       else if (r.出席狀態 === "缺席") summaryMap[key].缺席堂數 += 1;
-      summaryMap[key].費用小計 += r.費用;
+      const d = new Date(r.日期 + "T00:00:00");
+      summaryMap[key].上課日期.push(`${d.getMonth() + 1}/${d.getDate()}`);
     });
-    const summaryHeaders = ["家庭", "家長姓名", "出席堂數", "請假堂數", "缺席堂數", "費用小計"];
-    const summaryRows = Object.values(summaryMap).sort((r1, r2) => r1.家庭.localeCompare(r2.家庭));
+    const summaryHeaders = ["家庭", "家長姓名", "出席堂數", "請假堂數", "缺席堂數", "上課日期"];
+    const summaryRows = Object.values(summaryMap)
+      .map((r) => ({ ...r, 上課日期: r.上課日期.join("、") }))
+      .sort((r1, r2) => r1.家庭.localeCompare(r2.家庭));
 
     const title = `${y}年家長課上課統計`;
     return { title, filename: `${y}_家長課上課統計.xlsx`, summaryHeaders, summaryRows, detailHeaders, detailRows };
