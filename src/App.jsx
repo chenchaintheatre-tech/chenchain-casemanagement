@@ -929,6 +929,7 @@ function StudioCRM({ onLogout }) {
   const [recordsShowAll, setRecordsShowAll] = useState(false);
   const [recordsExpanded, setRecordsExpanded] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
+  const [unpaidExpanded, setUnpaidExpanded] = useState(false);
   const [accountsOverviewExpanded, setAccountsOverviewExpanded] = useState(false);
   const [endedTemplatesExpanded, setEndedTemplatesExpanded] = useState(false);
   const [msgFamilyId, setMsgFamilyId] = useState("");
@@ -1996,6 +1997,45 @@ function StudioCRM({ onLogout }) {
                           </table>
                         </div>
                       )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+              <button onClick={() => setUnpaidExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>未繳費總覽（{perSessionRows.filter((r) => !r.attendee.paid).length}）</div>
+                {unpaidExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              {unpaidExpanded && (() => {
+                const unpaidAll = perSessionRows.filter((r) => !r.attendee.paid).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+                const unpaidTotal = unpaidAll.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
+                return (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 12, color: "#8A8272", marginBottom: 10 }}>共 {unpaidAll.length} 筆，合計 {money(unpaidTotal)}</div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                          <th style={{ padding: "8px 6px" }}>上課日期</th><th style={{ padding: "8px 6px" }}>家庭</th><th style={{ padding: "8px 6px" }}>成員</th>
+                          <th style={{ padding: "8px 6px" }}>課程</th><th style={{ padding: "8px 6px" }}>費用</th><th style={{ padding: "8px 6px" }}>操作</th>
+                        </tr></thead>
+                        <tbody>
+                          {unpaidAll.map((r, idx) => (
+                            <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE", background: "#FDECEC" }}>
+                              <td style={{ padding: "8px 6px" }}>{r.date} {r.startTime}</td>
+                              <td style={{ padding: "8px 6px" }}>{families.find((f) => f.id === r.attendee.familyId)?.familyName || "—"}</td>
+                              <td style={{ padding: "8px 6px", fontWeight: 600 }}>{memberNameOnly(r.attendee)}</td>
+                              <td style={{ padding: "8px 6px" }}>{r.attendee.courseType}</td>
+                              <td style={{ padding: "8px 6px", fontWeight: 700, color: "#B4302A" }}>{money(r.attendee.fee)}</td>
+                              <td style={{ padding: "8px 6px" }}>
+                                <button style={{ ...btnGhost, ...btnSm }} onClick={() => setPaymentEdit({ session: slots.find((s) => s.id === r.sessionId), attendee: r.attendee })}>編輯繳費</button>
+                              </td>
+                            </tr>
+                          ))}
+                          {unpaidAll.length === 0 && <tr><td colSpan={6} style={{ padding: "12px 6px", color: "#9A9284" }}>目前沒有未繳費的紀錄</td></tr>}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 );
