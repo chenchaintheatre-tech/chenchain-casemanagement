@@ -920,6 +920,7 @@ function StudioCRM({ onLogout }) {
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("calendar");
   const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
+  const [reportYear, setReportYear] = useState(() => new Date().getFullYear());
   const [reportStudentKey, setReportStudentKey] = useState("");
   const [reportFamilyId, setReportFamilyId] = useState("");
   const [billingFamilyId, setBillingFamilyId] = useState("");
@@ -1264,6 +1265,11 @@ function StudioCRM({ onLogout }) {
     }
     return result.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
   };
+  const getYearSessions = (year) => {
+    let all = [];
+    for (let mon = 0; mon < 12; mon++) all = all.concat(getMonthSessions(year, mon));
+    return all.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  };
   const weekdayOf = (dateStr) => WEEKDAY_FULL[new Date(dateStr + "T00:00:00").getDay()];
   const weekdayShort = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); return WEEKDAYS[(d.getDay() + 6) % 7]; };
 
@@ -1504,10 +1510,10 @@ function StudioCRM({ onLogout }) {
     ]);
   };
 
-  // 報表五：家長課上課統計
+  // 報表五：家長課上課統計（年度）
   const buildParentClassStats = () => {
-    const [y, m] = reportMonth.split("-").map(Number);
-    const sessions = getMonthSessions(y, m - 1);
+    const y = reportYear;
+    const sessions = getYearSessions(y);
     const detailHeaders = ["日期", "星期", "時間", "家庭", "家長姓名", "出席狀態", "費用"];
     const detailRows = [];
     sessions.forEach((s) => {
@@ -1533,8 +1539,8 @@ function StudioCRM({ onLogout }) {
     const summaryHeaders = ["家庭", "家長姓名", "出席堂數", "請假堂數", "缺席堂數", "費用小計"];
     const summaryRows = Object.values(summaryMap).sort((r1, r2) => r1.家庭.localeCompare(r2.家庭));
 
-    const title = `${y}年${m}月家長課上課統計`;
-    return { title, filename: `${y}-${pad(m)}_家長課上課統計.xlsx`, summaryHeaders, summaryRows, detailHeaders, detailRows };
+    const title = `${y}年家長課上課統計`;
+    return { title, filename: `${y}_家長課上課統計.xlsx`, summaryHeaders, summaryRows, detailHeaders, detailRows };
   };
   const exportParentClassStats = () => {
     const b = buildParentClassStats();
@@ -2268,9 +2274,9 @@ function StudioCRM({ onLogout }) {
               </div>
 
               <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
-                <div style={{ fontWeight: 700, marginBottom: 10 }}>家長課上課統計</div>
-                <Field label="月份">
-                  <input type="month" style={inputStyle} value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} />
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>家長課上課統計（年度）</div>
+                <Field label="年份">
+                  <input type="number" style={inputStyle} value={reportYear} onChange={(e) => setReportYear(Number(e.target.value) || new Date().getFullYear())} placeholder="例如：2026" />
                 </Field>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportParentClassStats}><FileSpreadsheet size={14} />匯出 Excel</button>
