@@ -1350,7 +1350,7 @@ function StudioCRM({ onLogout }) {
     const byMember = {};
     let total = 0;
     slots.forEach((s) => {
-      s.attendees.filter((a) => a.familyId === reminderFamilyId && a.paymentMode === "單次" && !a.paid && a.attendance !== "請假").forEach((a) => {
+      s.attendees.filter((a) => a.familyId === reminderFamilyId && a.paymentMode === "單次" && !a.paid && !isUnbilled(a)).forEach((a) => {
         const name = nameNoSurname(a);
         if (!byMember[name]) byMember[name] = [];
         const d = new Date(s.date + "T00:00:00");
@@ -1379,7 +1379,9 @@ function StudioCRM({ onLogout }) {
     msg += `匯款後麻煩告知匯款帳號【末五碼】，以便我們查詢，謝謝您！`;
     return msg;
   };
-  const attendeeStatusLabel = (a) => (a.attendance === "請假" ? "不計費" : a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
+  // 請假或費用設為0的課程，一律視為不計費，不列入未繳費統計
+  const isUnbilled = (a) => a.attendance === "請假" || !a.fee;
+  const attendeeStatusLabel = (a) => (isUnbilled(a) ? "不計費" : a.paymentMode === "儲值" ? (a.deducted ? "已扣儲值" : "尚未扣款") : (a.paid ? "已繳" : "未繳"));
   const downloadSheet = (sheets, filename) => {
     const wb = XLSX.utils.book_new();
     sheets.forEach(({ name, rows, isAoa }) => {
@@ -1403,7 +1405,7 @@ function StudioCRM({ onLogout }) {
     let totalFee = 0, paidFee = 0;
     sessions.forEach((s) => {
       s.attendees.forEach((a) => {
-        if (a.attendance !== "請假") {
+        if (!isUnbilled(a)) {
           totalFee += a.fee || 0;
           const isPaid = a.paymentMode === "儲值" ? !!a.deducted : !!a.paid;
           if (isPaid) paidFee += a.fee || 0;
@@ -1458,7 +1460,7 @@ function StudioCRM({ onLogout }) {
       });
     });
     rows.sort((a, b) => (a.日期 + a.時間).localeCompare(b.日期 + b.時間));
-    const totalFee = rows.filter((r) => r.出席狀態 !== "請假").reduce((sum, r) => sum + r.費用, 0);
+    const totalFee = rows.filter((r) => r.繳費狀態 !== "不計費").reduce((sum, r) => sum + r.費用, 0);
     const sessionCount = slots.reduce((n, s) => n + s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).length, 0);
     const summaryRows = [...rows, {}, { 日期: "累計堂數", 星期: `${sessionCount} 次` }, { 日期: "累計費用", 費用: totalFee }];
     const title = `${fam?.familyName || ""}_${member?.name || "學生"}_課程明細`;
@@ -1728,7 +1730,7 @@ function StudioCRM({ onLogout }) {
                               <option value="">尚未記錄</option>
                               {ATTENDANCE_OPTIONS.map((op) => <option key={op} value={op}>{op}</option>)}
                             </select>
-                            {a.attendance === "請假" ? (
+                            {isUnbilled(a) ? (
                               <span style={{ color: "#1a1a1a", fontWeight: 700, fontSize: 11 }}>不計費</span>
                             ) : a.paymentMode === "單次" ? (
                               <button onClick={() => setPaymentEdit({ session, attendee: a })} style={{ border: "none", background: "transparent", cursor: "pointer", fontWeight: 700, color: a.paid ? "#2F7A3B" : "#B4302A", fontSize: 11 }}>
@@ -1958,7 +1960,7 @@ function StudioCRM({ onLogout }) {
                   });
                 });
                 rows.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-                const billableRows = rows.filter((r) => r.attendee.attendance !== "請假");
+                const billableRows = rows.filter((r) => !isUnbilled(r.attendee));
                 const totalFee = billableRows.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
                 const paidFee = billableRows.filter((r) => r.attendee.paid).reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
                 const unpaidRows = billableRows.filter((r) => !r.attendee.paid);
@@ -2039,7 +2041,7 @@ function StudioCRM({ onLogout }) {
                             </tr></thead>
                             <tbody>
                               {rows.map((r, i) => {
-                                const isLeave = r.attendee.attendance === "請假";
+                                const isLeave = isUnbilled(r.attendee);
                                 return (
                                 <tr key={i} style={{ borderBottom: "1px solid #F2ECDE", background: isLeave ? "transparent" : r.attendee.paid ? "transparent" : "#FDECEC" }}>
                                   <td style={{ padding: "6px 4px" }}>{r.date} {r.startTime}</td>
@@ -2067,11 +2069,11 @@ function StudioCRM({ onLogout }) {
 
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
               <button onClick={() => setUnpaidExpanded((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>未繳費總覽（{perSessionRows.filter((r) => !r.attendee.paid && r.attendee.attendance !== "請假").length}）</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>未繳費總覽（{perSessionRows.filter((r) => !r.attendee.paid && !isUnbilled(r.attendee)).length}）</div>
                 {unpaidExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
               {unpaidExpanded && (() => {
-                const unpaidAll = perSessionRows.filter((r) => !r.attendee.paid && r.attendee.attendance !== "請假").sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+                const unpaidAll = perSessionRows.filter((r) => !r.attendee.paid && !isUnbilled(r.attendee)).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
                 const unpaidTotal = unpaidAll.reduce((sum, r) => sum + (r.attendee.fee || 0), 0);
                 return (
                   <div style={{ marginTop: 14 }}>
@@ -2159,7 +2161,7 @@ function StudioCRM({ onLogout }) {
                         </tr></thead>
                         <tbody>
                           {filteredRows.map((row, idx) => {
-                            const isLeave = row.attendee.attendance === "請假";
+                            const isLeave = isUnbilled(row.attendee);
                             return (
                             <tr key={idx} style={{ borderBottom: "1px solid #F2ECDE" }}>
                               <td style={{ padding: "8px 6px" }}>{row.date} {row.startTime}</td>
