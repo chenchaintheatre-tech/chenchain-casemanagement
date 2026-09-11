@@ -1131,10 +1131,12 @@ function StudioCRM({ onLogout }) {
     return m ? `${fam.familyName}・${m.name}` : "（成員已刪除）";
   };
   const memberNameOnly = (a) => findMember(a.familyId, a.memberId)?.name || "（已刪除）";
-  // 請假的學員在月曆上以括號標示姓名；線上課則在姓名後加註「(線)」
-  const displayNameWithLeave = (a, mode) => {
+  // 請假的學員在月曆上以括號標示姓名；線上課加註「(線)」；0.5堂的課加註實際分鐘數，如「(25)」
+  const displayNameWithLeave = (a, mode, durationKey) => {
     const name = memberNameOnly(a);
-    const withMode = mode === "線上" ? `${name}(線)` : name;
+    const dur = durationKey ? durationByKey(durationKey) : null;
+    const withDuration = dur && dur.unit === 0.5 ? `${name}(${dur.minutes})` : name;
+    const withMode = mode === "線上" ? `${withDuration}(線)` : withDuration;
     return a.attendance === "請假" ? `(${withMode})` : withMode;
   };
 
@@ -1378,10 +1380,12 @@ function StudioCRM({ onLogout }) {
     return relation === "家長" ? full : givenNameOnly(full);
   };
 
-  // 列印課表專用：姓名省略姓氏，並保留請假／線上標註
-  const displayNameForPrint = (a, mode) => {
+  // 列印課表專用：姓名省略姓氏，並保留請假／線上／0.5堂時長標註
+  const displayNameForPrint = (a, mode, durationKey) => {
     const name = nameNoSurname(a);
-    const withMode = mode === "線上" ? `${name}(線)` : name;
+    const dur = durationKey ? durationByKey(durationKey) : null;
+    const withDuration = dur && dur.unit === 0.5 ? `${name}(${dur.minutes})` : name;
+    const withMode = mode === "線上" ? `${withDuration}(線)` : withDuration;
     return a.attendance === "請假" ? `(${withMode})` : withMode;
   };
 
@@ -1747,7 +1751,7 @@ function StudioCRM({ onLogout }) {
                       )}
                       {items.slice(0, 5).map((it) => {
                         const ci = courseInfo(it.courseType || COURSE_TYPES[0].key);
-                        const names = it.attendees.map((a) => displayNameWithLeave(a, it.mode)).join("、");
+                        const names = it.attendees.map((a) => displayNameWithLeave(a, it.mode, it.durationKey)).join("、");
                         return (
                           <div key={it.id} style={{ fontSize: 9.5, lineHeight: 1.25, background: ci.bg, color: ci.color, borderRadius: 4, padding: "1px 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 2 }}>
                             {it.virtual && <Repeat size={8} />}
@@ -2636,7 +2640,7 @@ function StudioCRM({ onLogout }) {
                           <div key={it.id} style={{ display: "flex", gap: 4, marginBottom: 3 }}>
                             <div style={{ fontWeight: 700, lineHeight: 1.3, flexShrink: 0, width: 34 }}>{it.startTime}</div>
                             <div style={{ lineHeight: 1.3, overflow: "hidden", flex: 1 }}>
-                              {it.attendees.map((a) => displayNameForPrint(a, it.mode)).join("、")}
+                              {it.attendees.map((a) => displayNameForPrint(a, it.mode, it.durationKey)).join("、")}
                             </div>
                           </div>
                         ))}
