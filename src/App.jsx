@@ -1009,6 +1009,7 @@ function StudioCRM({ onLogout }) {
   const [reminderCopied, setReminderCopied] = useState(false);
   const [irregularStudents, setIrregularStudents] = useState([]); // [{id, familyId, memberId}]
   const [irregularAddKey, setIrregularAddKey] = useState("");
+  const [irregularAddCategory, setIrregularAddCategory] = useState("weekday");
   const [irregularStartMonth, setIrregularStartMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgFamilySearch, setMsgFamilySearch] = useState("");
   const [printMode, setPrintMode] = useState(null); // null | 'calendar' | 'report'
@@ -1365,13 +1366,14 @@ function StudioCRM({ onLogout }) {
   const weekdayOf = (dateStr) => WEEKDAY_FULL[new Date(dateStr + "T00:00:00").getDay()];
   const weekdayShort = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); return WEEKDAYS[(d.getDay() + 6) % 7]; };
 
-  // 不定期學生名單 CRUD
-  const addIrregularStudent = (familyId, memberId) => {
+  // 不定期學生名單 CRUD：每位學生固定歸屬平日或假日其中一類，兩張表不會重複出現
+  const addIrregularStudent = (familyId, memberId, category) => {
     if (irregularStudents.some((s) => s.familyId === familyId && s.memberId === memberId)) return;
     pushHistory();
-    setIrregularStudents((prev) => [...prev, { id: uid(), familyId, memberId }]);
+    setIrregularStudents((prev) => [...prev, { id: uid(), familyId, memberId, category }]);
   };
   const removeIrregularStudent = (id) => { pushHistory(); setIrregularStudents((prev) => prev.filter((s) => s.id !== id)); };
+  const setIrregularStudentCategory = (id, category) => { pushHistory(); setIrregularStudents((prev) => prev.map((s) => (s.id === id ? { ...s, category } : s))); };
 
   // 不定期學生統計：取得從指定月份起算連續6個月
   const irregularMonthRange = () => {
@@ -1393,7 +1395,7 @@ function StudioCRM({ onLogout }) {
       const d = new Date(s.date + "T00:00:00");
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       if (isWeekend !== wantWeekend) return;
-      s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).forEach(() => {
+      s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId && a.courseType !== "團體課").forEach(() => {
         items.push(`${mon + 1}/${d.getDate()} ${s.startTime}`);
       });
     });
@@ -2583,11 +2585,12 @@ function StudioCRM({ onLogout }) {
         {tab === "irregular" && (() => {
           const months = irregularMonthRange();
           const trackedKeys = new Set(irregularStudents.map((s) => `${s.familyId}::${s.memberId}`));
+          const categoryLabel = (c) => (c === "weekend" ? "假日" : "平日");
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>不定期學生名單</div>
-                <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 14 }}>新增沒有固定排課週期的學生，下方會自動統計他們過去在月曆上的實際上課紀錄。</div>
+                <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 14 }}>新增沒有固定排課週期的學生，並指定歸屬平日或假日時段；下方會自動統計他們過去在月曆上的實際上課紀錄。</div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
                   <select style={{ ...inputStyle, maxWidth: 280 }} value={irregularAddKey} onChange={(e) => setIrregularAddKey(e.target.value)}>
                     <option value="">請選擇學生</option>
@@ -2595,16 +2598,25 @@ function StudioCRM({ onLogout }) {
                       <option key={`${f.id}::${m.id}`} value={`${f.id}::${m.id}`}>{f.familyName}・{m.name}</option>
                     )))}
                   </select>
-                  <button style={btnPrimary} onClick={() => { if (!irregularAddKey) return; const [fid, mid] = irregularAddKey.split("::"); addIrregularStudent(fid, mid); setIrregularAddKey(""); }} disabled={!irregularAddKey}><Plus size={14} />新增</button>
+                  <select style={{ ...inputStyle, maxWidth: 140 }} value={irregularAddCategory} onChange={(e) => setIrregularAddCategory(e.target.value)}>
+                    <option value="weekday">平日時段</option>
+                    <option value="weekend">假日時段</option>
+                  </select>
+                  <button style={btnPrimary} onClick={() => { if (!irregularAddKey) return; const [fid, mid] = irregularAddKey.split("::"); addIrregularStudent(fid, mid, irregularAddCategory); setIrregularAddKey(""); }} disabled={!irregularAddKey}><Plus size={14} />新增</button>
                 </div>
                 {irregularStudents.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未新增任何學生。</div>}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {irregularStudents.map((s) => {
                     const fam = families.find((f) => f.id === s.familyId);
                     const mem = fam?.members.find((m) => m.id === s.memberId);
+                    const cat = s.category || "weekday";
                     return (
                       <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, background: "#F2ECDE", color: "#5C5648", padding: "6px 10px", borderRadius: 99, fontWeight: 600 }}>
                         {fam?.familyName || "—"}・{mem?.name || "（已刪除）"}
+                        <select value={cat} onChange={(e) => setIrregularStudentCategory(s.id, e.target.value)} style={{ fontSize: 11, border: "none", background: "#fff", borderRadius: 6, padding: "1px 4px" }}>
+                          <option value="weekday">平日</option>
+                          <option value="weekend">假日</option>
+                        </select>
                         <button onClick={() => removeIrregularStudent(s.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#B4302A", display: "flex" }}><X size={13} /></button>
                       </span>
                     );
@@ -2625,9 +2637,14 @@ function StudioCRM({ onLogout }) {
                   <div style={{ fontSize: 13, color: "#9A9284" }}>請先在上方新增要追蹤的學生。</div>
                 ) : (
                   <>
-                    {[{ key: "weekday", title: "平日時段（週一～週五）", weekend: false }, { key: "weekend", title: "假日時段（週六、週日）", weekend: true }].map((section) => (
+                    {[{ key: "weekday", title: "平日時段（週一～週五）", weekend: false }, { key: "weekend", title: "假日時段（週六、週日）", weekend: true }].map((section) => {
+                      const sectionStudents = irregularStudents.filter((s) => (s.category || "weekday") === section.key);
+                      return (
                       <div key={section.key} style={{ marginBottom: 22, overflowX: "auto" }}>
                         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{section.title}</div>
+                        {sectionStudents.length === 0 ? (
+                          <div style={{ fontSize: 12, color: "#B7B0A0" }}>目前沒有歸屬此時段的學生。</div>
+                        ) : (
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
                           <thead>
                             <tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
@@ -2636,7 +2653,7 @@ function StudioCRM({ onLogout }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {irregularStudents.map((s) => {
+                            {sectionStudents.map((s) => {
                               const fam = families.find((f) => f.id === s.familyId);
                               const mem = fam?.members.find((m) => m.id === s.memberId);
                               return (
@@ -2650,8 +2667,10 @@ function StudioCRM({ onLogout }) {
                             })}
                           </tbody>
                         </table>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </>
                 )}
               </div>
