@@ -2002,27 +2002,71 @@ function StudioCRM({ onLogout }) {
                       {billingExpandAccounts && (
                         <div style={{ padding: 14 }}>
                           {accounts.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>此家庭尚無儲值帳戶。</div>}
-                          {accounts.map((acc) => (
-                            <div key={acc.id} style={{ marginBottom: 14 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>單堂 {money(acc.pricePerUnit)}｜剩餘 {acc.remainingUnits ?? 0} 堂</div>
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                                <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
-                                  <th style={{ padding: "6px 4px" }}>儲值日期</th><th style={{ padding: "6px 4px" }}>金額</th><th style={{ padding: "6px 4px" }}>增加堂數</th>
-                                  <th style={{ padding: "6px 4px" }}>付款方式</th><th style={{ padding: "6px 4px" }}>末五碼</th><th style={{ padding: "6px 4px" }}>發票</th>
-                                </tr></thead>
-                                <tbody>
-                                  {(acc.topUps || []).map((t, i) => (
-                                    <tr key={i} style={{ borderBottom: "1px solid #F2ECDE" }}>
-                                      <td style={{ padding: "6px 4px" }}>{t.date}</td><td style={{ padding: "6px 4px" }}>{money(t.amount)}</td><td style={{ padding: "6px 4px" }}>{t.units}</td>
-                                      <td style={{ padding: "6px 4px" }}>{t.method}{t.method === "匯款" && t.last5 ? `（末五碼 ${t.last5}）` : ""}</td>
-                                      <td style={{ padding: "6px 4px" }}>{t.last5 || "—"}</td><td style={{ padding: "6px 4px" }}>{t.invoiced ? "已開立" : "未開立"}</td>
-                                    </tr>
-                                  ))}
-                                  {(acc.topUps || []).length === 0 && <tr><td colSpan={6} style={{ padding: "6px 4px", color: "#9A9284" }}>尚無儲值紀錄</td></tr>}
-                                </tbody>
-                              </table>
+                          {accounts.map((acc) => {
+                            const deductions = [];
+                            slots.forEach((s) => {
+                              s.attendees.filter((a) => a.familyId === fam.id && a.storedAccountId === acc.id && a.deducted).forEach((a) => {
+                                deductions.push({ date: s.date, time: s.startTime, courseType: a.courseType, name: memberNameOnly(a), units: effectiveUnits(a.courseType, s.durationKey) });
+                              });
+                            });
+                            const events = [
+                              ...(acc.topUps || []).map((t) => ({ kind: "topup", date: t.date, time: "00:00" })),
+                              ...deductions.map((d) => ({ kind: "deduct", ...d })),
+                            ].sort((e1, e2) => (e1.date + e1.time).localeCompare(e2.date + e2.time));
+                            let balance = 0;
+                            const deductionRows = [];
+                            const topUpUnitsSorted = [...(acc.topUps || [])].map((t) => t.units);
+                            let topUpIdx = 0;
+                            events.forEach((e) => {
+                              if (e.kind === "topup") { balance += topUpUnitsSorted[topUpIdx] || 0; topUpIdx += 1; }
+                              else { balance -= e.units; deductionRows.push({ ...e, balanceAfter: balance }); }
+                            });
+                            return (
+                            <div key={acc.id} style={{ marginBottom: 18 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>單堂 {money(acc.pricePerUnit)}｜剩餘 {acc.remainingUnits ?? 0} 堂</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: "#2F7A3B", marginBottom: 6 }}>儲值紀錄</div>
+                                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                    <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                                      <th style={{ padding: "6px 4px" }}>日期</th><th style={{ padding: "6px 4px" }}>金額</th><th style={{ padding: "6px 4px" }}>堂數</th><th style={{ padding: "6px 4px" }}>方式</th>
+                                    </tr></thead>
+                                    <tbody>
+                                      {(acc.topUps || []).map((t, i) => (
+                                        <tr key={i} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                                          <td style={{ padding: "6px 4px" }}>{t.date}</td>
+                                          <td style={{ padding: "6px 4px", color: "#2F7A3B", fontWeight: 600 }}>+{money(t.amount)}</td>
+                                          <td style={{ padding: "6px 4px", color: "#2F7A3B", fontWeight: 600 }}>+{t.units}</td>
+                                          <td style={{ padding: "6px 4px" }}>{t.method}{t.method === "匯款" && t.last5 ? `（末五碼 ${t.last5}）` : ""}</td>
+                                        </tr>
+                                      ))}
+                                      {(acc.topUps || []).length === 0 && <tr><td colSpan={4} style={{ padding: "6px 4px", color: "#9A9284" }}>尚無儲值紀錄</td></tr>}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: "#B4302A", marginBottom: 6 }}>扣款紀錄</div>
+                                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                    <thead><tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                                      <th style={{ padding: "6px 4px" }}>日期</th><th style={{ padding: "6px 4px" }}>課程</th><th style={{ padding: "6px 4px" }}>堂數</th><th style={{ padding: "6px 4px" }}>扣後剩餘</th>
+                                    </tr></thead>
+                                    <tbody>
+                                      {deductionRows.map((d, i) => (
+                                        <tr key={i} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                                          <td style={{ padding: "6px 4px" }}>{d.date}</td>
+                                          <td style={{ padding: "6px 4px" }}>{d.courseType}｜{d.name}</td>
+                                          <td style={{ padding: "6px 4px", color: "#B4302A", fontWeight: 600 }}>-{d.units}</td>
+                                          <td style={{ padding: "6px 4px" }}>{d.balanceAfter} 堂</td>
+                                        </tr>
+                                      ))}
+                                      {deductionRows.length === 0 && <tr><td colSpan={4} style={{ padding: "6px 4px", color: "#9A9284" }}>尚無扣款紀錄</td></tr>}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
