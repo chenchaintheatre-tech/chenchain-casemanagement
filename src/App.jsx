@@ -499,7 +499,7 @@ function EditAttendeeForm({ session, attendee, family, onSave, onCancel }) {
   );
 }
 
-function AddAttendeeForm({ session, families, onAdd, onCancel }) {
+function AddAttendeeForm({ session, families, onAdd, onCancel, onCreateAccount }) {
   const [familyId, setFamilyId] = useState("");
   const [memberId, setMemberId] = useState("");
   const [planId, setPlanId] = useState("");
@@ -581,9 +581,21 @@ function AddAttendeeForm({ session, families, onAdd, onCancel }) {
         </div>
       </Field>
 
-      {paymentMode === "儲值" && family && (
+      {paymentMode === "儲值" && family && (family.storedAccounts || []).length === 0 && (
+        <Field label="這個家庭還沒有儲值帳戶">
+          <CreateStoredAccountForm
+            compact
+            initialPricePerUnit={effUnit ? (Number(fee) || 0) / effUnit : ""}
+            onCreate={(form) => {
+              const newId = onCreateAccount(familyId, form);
+              setStoredAccountId(newId);
+            }}
+          />
+        </Field>
+      )}
+      {paymentMode === "儲值" && family && (family.storedAccounts || []).length > 0 && (
         <Field label="選擇儲值帳戶（單堂價格需相符，價位相同的課程可共用）">
-          {matchingAccounts.length === 0 && <div style={{ fontSize: 12, color: "#B4302A" }}>此家庭尚無儲值帳戶，請先至家庭管理新增。</div>}
+          {matchingAccounts.length === 0 && <div style={{ fontSize: 12, color: "#B4302A" }}>沒有符合此價位的儲值帳戶，請至收費總覽調整或建立新帳戶。</div>}
           {matchingAccounts.map((a) => (
             <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 6, padding: "6px 8px", borderRadius: 8, background: a.id === storedAccountId ? "#FBEFE7" : "#F7F5EF", cursor: "pointer" }}>
               <input type="radio" name="acc" checked={a.id === storedAccountId} onChange={() => setStoredAccountId(a.id)} />
@@ -621,6 +633,62 @@ function AddAttendeeForm({ session, families, onAdd, onCancel }) {
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
         <button style={btnGhost} onClick={onCancel}>取消</button>
         <button style={btnPrimary} onClick={submit}><Save size={14} />加入</button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   建立新的儲值帳戶（含首次儲值）
+========================================================= */
+function CreateStoredAccountForm({ initialPricePerUnit, onCreate, onCancel, compact }) {
+  const [pricePerUnit, setPricePerUnit] = useState(initialPricePerUnit || "");
+  const [amount, setAmount] = useState("");
+  const [units, setUnits] = useState("");
+  const [method, setMethod] = useState("現金");
+  const [last5, setLast5] = useState("");
+  const [invoiced, setInvoiced] = useState(false);
+
+  const submit = () => {
+    if (!pricePerUnit || !amount || !units) return;
+    onCreate({ pricePerUnit, amount, units, method, last5, invoiced });
+  };
+
+  return (
+    <div style={{ background: "#FBEFE7", border: "1px solid #E8C9AE", borderRadius: 10, padding: compact ? 12 : 16 }}>
+      {!compact && <div style={{ fontSize: 12, color: "#8A5A3A", fontWeight: 700, marginBottom: 10 }}>新增儲值帳戶</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+        <div>
+          <label style={{ fontSize: 11, color: "#8A8272" }}>單堂價格</label>
+          <input style={inputStyle} type="number" value={pricePerUnit} onChange={(e) => setPricePerUnit(e.target.value)} placeholder="NT$" />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: "#8A8272" }}>首次儲值金額</label>
+          <input style={inputStyle} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="NT$" />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: "#8A8272" }}>增加堂數</label>
+          <input style={inputStyle} type="number" value={units} onChange={(e) => setUnits(e.target.value)} placeholder="堂" />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: "#8A8272" }}>付款方式</label>
+          <select style={inputStyle} value={method} onChange={(e) => setMethod(e.target.value)}>
+            {PAYMENT_METHOD_TYPES.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+      {method === "匯款" && (
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ fontSize: 11, color: "#8A8272" }}>匯款帳號末五碼</label>
+          <input style={inputStyle} maxLength={5} value={last5} onChange={(e) => setLast5(e.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="12345" />
+        </div>
+      )}
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 10, cursor: "pointer" }}>
+        <input type="checkbox" checked={invoiced} onChange={(e) => setInvoiced(e.target.checked)} />已開立發票
+      </label>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        {onCancel && <button style={btnGhost} onClick={onCancel}>取消</button>}
+        <button style={btnPrimary} onClick={submit}>{compact ? "建立帳戶並使用" : <><Save size={14} />儲存</>}</button>
       </div>
     </div>
   );
@@ -925,6 +993,7 @@ function StudioCRM({ onLogout }) {
   const [reportFamilyId, setReportFamilyId] = useState("");
   const [billingFamilyId, setBillingFamilyId] = useState("");
   const [billingExpandAccounts, setBillingExpandAccounts] = useState(false);
+  const [showCreateAccountBilling, setShowCreateAccountBilling] = useState(false);
   const [billingExpandSessions, setBillingExpandSessions] = useState(false);
   const [recordsMonth, setRecordsMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [recordsShowAll, setRecordsShowAll] = useState(false);
@@ -1071,6 +1140,22 @@ function StudioCRM({ onLogout }) {
 
   const adjustStoredAccount = (familyId, accountId, delta) => {
     setFamilies((prev) => prev.map((f) => (f.id !== familyId ? f : { ...f, storedAccounts: (f.storedAccounts || []).map((a) => (a.id === accountId ? { ...a, remainingUnits: (a.remainingUnits ?? 0) + delta } : a)) })));
+  };
+
+  // 建立新的儲值帳戶（含首次儲值紀錄），回傳新帳戶id方便呼叫端立即使用
+  const createStoredAccount = (familyId, form) => {
+    const newId = uid();
+    pushHistory();
+    setFamilies((prev) => prev.map((f) => (f.id !== familyId ? f : {
+      ...f,
+      storedAccounts: [...(f.storedAccounts || []), {
+        id: newId,
+        pricePerUnit: Number(form.pricePerUnit) || 0,
+        remainingUnits: Number(form.units) || 0,
+        topUps: [{ id: uid(), date: todayStr(), amount: Number(form.amount) || 0, units: Number(form.units) || 0, method: form.method || "現金", last5: form.last5 || "", invoiced: !!form.invoiced }],
+      }],
+    })));
+    return newId;
   };
 
   /* ---------- 家庭 CRUD ---------- */
@@ -1943,7 +2028,7 @@ function StudioCRM({ onLogout }) {
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>個別家庭繳費查詢</div>
-                <select style={{ ...inputStyle, maxWidth: 260 }} value={billingFamilyId} onChange={(e) => { setBillingFamilyId(e.target.value); setBillingExpandAccounts(false); setBillingExpandSessions(false); }}>
+                <select style={{ ...inputStyle, maxWidth: 260 }} value={billingFamilyId} onChange={(e) => { setBillingFamilyId(e.target.value); setBillingExpandAccounts(false); setBillingExpandSessions(false); setShowCreateAccountBilling(false); }}>
                   <option value="">請選擇家庭查看詳細繳費狀況</option>
                   {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
                 </select>
@@ -1995,12 +2080,27 @@ function StudioCRM({ onLogout }) {
                     </div>
 
                     <div style={{ border: "1px solid #EDE6D6", borderRadius: 10, marginBottom: 10, overflow: "hidden" }}>
-                      <button onClick={() => setBillingExpandAccounts((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#FBF8F1", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
-                        <span><Wallet size={14} style={{ verticalAlign: -2, marginRight: 4 }} />儲值帳戶明細（{accounts.length}）</span>
-                        {billingExpandAccounts ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      </button>
+                      <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#FBF8F1" }}>
+                        <button onClick={() => setBillingExpandAccounts((v) => !v)} style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, padding: 0, color: "#2E2A22" }}>
+                          <span><Wallet size={14} style={{ verticalAlign: -2, marginRight: 4 }} />儲值帳戶明細（{accounts.length}）</span>
+                        </button>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <button onClick={() => { setShowCreateAccountBilling((v) => !v); setBillingExpandAccounts(true); }} style={{ ...btnGhost, ...btnSm }}><Plus size={12} />建立儲值帳戶</button>
+                          <button onClick={() => setBillingExpandAccounts((v) => !v)} style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex" }}>
+                            {billingExpandAccounts ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </button>
+                        </div>
+                      </div>
                       {billingExpandAccounts && (
                         <div style={{ padding: 14 }}>
+                          {showCreateAccountBilling && (
+                            <div style={{ marginBottom: 16 }}>
+                              <CreateStoredAccountForm
+                                onCancel={() => setShowCreateAccountBilling(false)}
+                                onCreate={(form) => { createStoredAccount(fam.id, form); setShowCreateAccountBilling(false); }}
+                              />
+                            </div>
+                          )}
                           {accounts.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>此家庭尚無儲值帳戶。</div>}
                           {accounts.map((acc) => {
                             const deductions = [];
@@ -2457,7 +2557,7 @@ function StudioCRM({ onLogout }) {
 
       {attendeeModalSessionId && (
         <Modal title="新增上課者" onClose={() => setAttendeeModalSessionId(null)}>
-          <AddAttendeeForm session={daySessions.find((s) => s.id === attendeeModalSessionId)} families={families} onAdd={(att) => addAttendee(daySessions.find((s) => s.id === attendeeModalSessionId), att)} onCancel={() => setAttendeeModalSessionId(null)} />
+          <AddAttendeeForm session={daySessions.find((s) => s.id === attendeeModalSessionId)} families={families} onAdd={(att) => addAttendee(daySessions.find((s) => s.id === attendeeModalSessionId), att)} onCancel={() => setAttendeeModalSessionId(null)} onCreateAccount={createStoredAccount} />
         </Modal>
       )}
 
