@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy, ChevronDown, ChevronUp
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy, ChevronDown, ChevronUp, CalendarDays
 } from "lucide-react";
 
 /* =========================================================
@@ -1007,6 +1007,9 @@ function StudioCRM({ onLogout }) {
   const [msgCopied, setMsgCopied] = useState(false);
   const [reminderFamilyId, setReminderFamilyId] = useState("");
   const [reminderCopied, setReminderCopied] = useState(false);
+  const [irregularStudents, setIrregularStudents] = useState([]); // [{id, familyId, memberId}]
+  const [irregularAddKey, setIrregularAddKey] = useState("");
+  const [irregularStartMonth, setIrregularStartMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [msgFamilySearch, setMsgFamilySearch] = useState("");
   const [printMode, setPrintMode] = useState(null); // null | 'calendar' | 'report'
   const [printReportData, setPrintReportData] = useState(null); // { title, tables: [{name, headers, rows}] }
@@ -1046,7 +1049,7 @@ function StudioCRM({ onLogout }) {
   const HISTORY_LIMIT = 20;
   const pushHistory = () => {
     setHistory((h) => {
-      const snapshot = { families, slots, templates, vacations, staffList, duties };
+      const snapshot = { families, slots, templates, vacations, staffList, duties, irregularStudents };
       const next = [...h, snapshot];
       return next.length > HISTORY_LIMIT ? next.slice(next.length - HISTORY_LIMIT) : next;
     });
@@ -1061,6 +1064,7 @@ function StudioCRM({ onLogout }) {
       setVacations(prev.vacations || []);
       setStaffList(prev.staffList || []);
       setDuties(prev.duties || {});
+      setIrregularStudents(prev.irregularStudents || []);
       return h.slice(0, -1);
     });
   };
@@ -1104,6 +1108,7 @@ function StudioCRM({ onLogout }) {
       setVacations(data?.value?.vacations || []);
       setStaffList(data?.value?.staffList || []);
       setDuties(data?.value?.duties || {});
+      setIrregularStudents(data?.value?.irregularStudents || []);
       setSaveError("");
     } catch (e) {
       setSaveError("讀取資料失敗，請確認網路連線與資料庫設定");
@@ -1114,13 +1119,13 @@ function StudioCRM({ onLogout }) {
     (async () => { await loadFromServer(); setLoaded(true); })();
   }, [loadFromServer]);
 
-  const persist = useCallback(async (f, s, t, v, st, du) => {
+  const persist = useCallback(async (f, s, t, v, st, du, irr) => {
     try {
-      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t, vacations: v, staffList: st, duties: du }, updated_at: new Date().toISOString() });
+      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t, vacations: v, staffList: st, duties: du, irregularStudents: irr }, updated_at: new Date().toISOString() });
       setSaveError(error ? "儲存失敗，請稍後再試" : "");
     } catch (e) { setSaveError("儲存失敗，請稍後再試"); }
   }, []);
-  useEffect(() => { if (loaded) persist(families, slots, templates, vacations, staffList, duties); }, [families, slots, templates, vacations, staffList, duties, loaded]); // eslint-disable-line
+  useEffect(() => { if (loaded) persist(families, slots, templates, vacations, staffList, duties, irregularStudents); }, [families, slots, templates, vacations, staffList, duties, irregularStudents, loaded]); // eslint-disable-line
 
   /* ---------- 查找工具 ---------- */
   const findMember = (familyId, memberId) => families.find((f) => f.id === familyId)?.members.find((m) => m.id === memberId);
@@ -1359,6 +1364,41 @@ function StudioCRM({ onLogout }) {
   };
   const weekdayOf = (dateStr) => WEEKDAY_FULL[new Date(dateStr + "T00:00:00").getDay()];
   const weekdayShort = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); return WEEKDAYS[(d.getDay() + 6) % 7]; };
+
+  // 不定期學生名單 CRUD
+  const addIrregularStudent = (familyId, memberId) => {
+    if (irregularStudents.some((s) => s.familyId === familyId && s.memberId === memberId)) return;
+    pushHistory();
+    setIrregularStudents((prev) => [...prev, { id: uid(), familyId, memberId }]);
+  };
+  const removeIrregularStudent = (id) => { pushHistory(); setIrregularStudents((prev) => prev.filter((s) => s.id !== id)); };
+
+  // 不定期學生統計：取得從指定月份起算連續6個月
+  const irregularMonthRange = () => {
+    const [y, m] = irregularStartMonth.split("-").map(Number);
+    const months = [];
+    for (let i = 0; i < 6; i++) {
+      const idx = (m - 1) + i;
+      const year = y + Math.floor(idx / 12);
+      const mon = ((idx % 12) + 12) % 12;
+      months.push({ year, mon, label: `${year}/${mon + 1}` });
+    }
+    return months;
+  };
+  // 取得某學生在某月份、某類別（平日／假日）的所有上課日期時間
+  const irregularCellText = (familyId, memberId, year, mon, wantWeekend) => {
+    const sessions = getMonthSessions(year, mon);
+    const items = [];
+    sessions.forEach((s) => {
+      const d = new Date(s.date + "T00:00:00");
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      if (isWeekend !== wantWeekend) return;
+      s.attendees.filter((a) => a.familyId === familyId && a.memberId === memberId).forEach(() => {
+        items.push(`${mon + 1}/${d.getDate()} ${s.startTime}`);
+      });
+    });
+    return items.join("、");
+  };
 
   const searchMsgFamily = () => {
     const q = msgFamilySearch.trim();
@@ -1651,7 +1691,7 @@ function StudioCRM({ onLogout }) {
     ]);
   };
 
-  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet], ["notify", "通知訊息", MessageSquare]];
+  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet], ["notify", "通知訊息", MessageSquare], ["irregular", "不定期學生統計", CalendarDays]];
 
   return (
     <>
@@ -2538,6 +2578,86 @@ function StudioCRM({ onLogout }) {
             })()}
           </div>
         )}
+
+        {/* ---------------- 不定期學生統計 ---------------- */}
+        {tab === "irregular" && (() => {
+          const months = irregularMonthRange();
+          const trackedKeys = new Set(irregularStudents.map((s) => `${s.familyId}::${s.memberId}`));
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>不定期學生名單</div>
+                <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 14 }}>新增沒有固定排課週期的學生，下方會自動統計他們過去在月曆上的實際上課紀錄。</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                  <select style={{ ...inputStyle, maxWidth: 280 }} value={irregularAddKey} onChange={(e) => setIrregularAddKey(e.target.value)}>
+                    <option value="">請選擇學生</option>
+                    {families.flatMap((f) => f.members.filter((m) => !trackedKeys.has(`${f.id}::${m.id}`)).map((m) => (
+                      <option key={`${f.id}::${m.id}`} value={`${f.id}::${m.id}`}>{f.familyName}・{m.name}</option>
+                    )))}
+                  </select>
+                  <button style={btnPrimary} onClick={() => { if (!irregularAddKey) return; const [fid, mid] = irregularAddKey.split("::"); addIrregularStudent(fid, mid); setIrregularAddKey(""); }} disabled={!irregularAddKey}><Plus size={14} />新增</button>
+                </div>
+                {irregularStudents.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚未新增任何學生。</div>}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {irregularStudents.map((s) => {
+                    const fam = families.find((f) => f.id === s.familyId);
+                    const mem = fam?.members.find((m) => m.id === s.memberId);
+                    return (
+                      <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, background: "#F2ECDE", color: "#5C5648", padding: "6px 10px", borderRadius: 99, fontWeight: 600 }}>
+                        {fam?.familyName || "—"}・{mem?.name || "（已刪除）"}
+                        <button onClick={() => removeIrregularStudent(s.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#B4302A", display: "flex" }}><X size={13} /></button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>半年上課狀況</div>
+                  <Field label="起始月份">
+                    <input type="month" style={inputStyle} value={irregularStartMonth} onChange={(e) => setIrregularStartMonth(e.target.value)} />
+                  </Field>
+                  <div style={{ fontSize: 12, color: "#9A9284" }}>顯示 {months[0].label} ～ {months[5].label}</div>
+                </div>
+
+                {irregularStudents.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "#9A9284" }}>請先在上方新增要追蹤的學生。</div>
+                ) : (
+                  <>
+                    {[{ key: "weekday", title: "平日時段（週一～週五）", weekend: false }, { key: "weekend", title: "假日時段（週六、週日）", weekend: true }].map((section) => (
+                      <div key={section.key} style={{ marginBottom: 22, overflowX: "auto" }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{section.title}</div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
+                          <thead>
+                            <tr style={{ textAlign: "left", color: "#9A9284", borderBottom: "1px solid #EDE6D6" }}>
+                              <th style={{ padding: "6px 4px", width: 130 }}>學生</th>
+                              {months.map((mo) => <th key={mo.label} style={{ padding: "6px 4px" }}>{mo.label}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {irregularStudents.map((s) => {
+                              const fam = families.find((f) => f.id === s.familyId);
+                              const mem = fam?.members.find((m) => m.id === s.memberId);
+                              return (
+                                <tr key={s.id} style={{ borderBottom: "1px solid #F2ECDE" }}>
+                                  <td style={{ padding: "6px 4px", fontWeight: 600 }}>{fam?.familyName || "—"}・{mem?.name || "（已刪除）"}</td>
+                                  {months.map((mo) => (
+                                    <td key={mo.label} style={{ padding: "6px 4px", color: "#5C5648" }}>{irregularCellText(s.familyId, s.memberId, mo.year, mo.mon, section.weekend) || "—"}</td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {familyModal && (
