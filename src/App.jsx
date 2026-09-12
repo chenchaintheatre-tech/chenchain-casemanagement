@@ -1001,6 +1001,8 @@ function StudioCRM({ onLogout }) {
   const [msgCopied, setMsgCopied] = useState(false);
   const [reminderFamilyId, setReminderFamilyId] = useState("");
   const [reminderCopied, setReminderCopied] = useState(false);
+  const [dailyReminderDate, setDailyReminderDate] = useState(() => { const d = new Date(); d.setDate(d.getDate() + 1); return toDateStr(d); });
+  const [dailyReminderCopiedId, setDailyReminderCopiedId] = useState(null);
   const [irregularStudents, setIrregularStudents] = useState([]); // [{id, familyId, memberId}]
   const [irregularAddKey, setIrregularAddKey] = useState("");
   const [irregularAddCategory, setIrregularAddCategory] = useState("weekday");
@@ -1522,6 +1524,48 @@ function StudioCRM({ onLogout }) {
     msg += `           中國信託 大安分行（銀行代號822）\n`;
     msg += `匯款後麻煩告知匯款帳號【末五碼】，以便我們查詢，謝謝您！`;
     return msg;
+  };
+
+  // 每日上課提醒生成器：依日期列出當天所有課程，每堂課獨立一則訊息
+  const relativeDayLabel = (dateStr) => {
+    const target = new Date(dateStr + "T00:00:00");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((target - today) / 86400000);
+    if (diffDays === 0) return "今天";
+    if (diffDays === 1) return "明天";
+    if (diffDays === 2) return "後天";
+    return "";
+  };
+  const buildDailyClassReminders = (dateStr) => {
+    const sessions = getDaySessions(dateStr);
+    const d = new Date(dateStr + "T00:00:00");
+    const dayLabel = `${d.getMonth() + 1}/${d.getDate()}(${weekdayShort(dateStr)})`;
+    const relLabel = relativeDayLabel(dateStr);
+
+    // 依家庭分組，同一家庭同一天的課程合併成一則訊息；團體課不合併學生姓名，每位上課者各自一筆
+    const byFamily = {};
+    sessions.forEach((s) => {
+      const endTime = addMinutesToTime(s.startTime, durationByKey(s.durationKey).minutes);
+      s.attendees.forEach((a) => {
+        if (!byFamily[a.familyId]) byFamily[a.familyId] = [];
+        byFamily[a.familyId].push({
+          startTime: s.startTime, endTime, name: nameNoSurname(a), courseType: a.courseType || "課程",
+        });
+      });
+    });
+
+    const lines = [];
+    Object.entries(byFamily).forEach(([familyId, entries]) => {
+      entries.sort((a, b) => a.startTime.localeCompare(b.startTime));
+      const text = entries.length === 1
+        ? `小提醒，${relLabel}${dayLabel}${entries[0].startTime}-${entries[0].endTime} 有一堂${entries[0].name}的${entries[0].courseType}喔！`
+        : `小提醒，${relLabel}${dayLabel}有以下課程喔：
+` + entries.map((e) => `${e.startTime}-${e.endTime}　${e.name}．${e.courseType}`).join("
+");
+      lines.push({ id: familyId, text, sortKey: entries[0].startTime });
+    });
+    return lines.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   };
   // 請假或費用設為0的課程，一律視為不計費，不列入未繳費統計
   const isUnbilled = (a) => a.attendance === "請假" || !a.fee;
@@ -2601,6 +2645,42 @@ function StudioCRM({ onLogout }) {
                     </button>
                   </div>
                 </>
+              );
+            })()}
+          </div>
+        )}
+
+        {tab === "notify" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20, marginTop: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>每日上課提醒生成器</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇日期，列出當天每一堂課的提醒訊息，每堂課獨立一則，方便分別傳給不同家長。</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 200px" }}>
+                <Field label="通知日期">
+                  <input type="date" style={inputStyle} value={dailyReminderDate} onChange={(e) => { setDailyReminderDate(e.target.value); setDailyReminderCopiedId(null); }} />
+                </Field>
+              </div>
+            </div>
+
+            {(() => {
+              const lines = buildDailyClassReminders(dailyReminderDate);
+              if (lines.length === 0) {
+                return <div style={{ fontSize: 13, color: "#9A9284" }}>這天沒有排課紀錄。</div>;
+              }
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {lines.map((l) => (
+                    <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, border: "1px solid #EDE6D6", borderRadius: 9, padding: "10px 12px", background: "#FBF8F1" }}>
+                      <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-line" }}>{l.text}</div>
+                      <button
+                        style={{ ...btnGhost, flexShrink: 0 }}
+                        onClick={() => { navigator.clipboard.writeText(l.text); setDailyReminderCopiedId(l.id); setTimeout(() => setDailyReminderCopiedId((cur) => (cur === l.id ? null : cur)), 2000); }}
+                      >
+                        <Copy size={14} />{dailyReminderCopiedId === l.id ? "已複製！" : "複製"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               );
             })()}
           </div>
