@@ -264,10 +264,6 @@ function FamilyForm({ initial, onSave, onCancel }) {
   const updateMember = (id, patch) => setMembers(members.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   const removeMember = (id) => setMembers(members.filter((m) => m.id !== id));
 
-  const createAccount = (pricePerUnit) => setStoredAccounts([...storedAccounts, { id: uid(), pricePerUnit, remainingUnits: 0, topUps: [] }]);
-  const topUpAccount = (accId, rec) => setStoredAccounts(storedAccounts.map((a) => (a.id === accId ? { ...a, remainingUnits: (a.remainingUnits ?? 0) + rec.units, topUps: [...(a.topUps || []), rec] } : a)));
-  const deleteAccount = (accId) => setStoredAccounts(storedAccounts.filter((a) => a.id !== accId));
-
   const submit = () => {
     if (!familyName.trim()) return;
     const cleaned = members.filter((m) => m.name.trim());
@@ -278,10 +274,7 @@ function FamilyForm({ initial, onSave, onCancel }) {
     <div>
       <Field label="家庭名稱 *"><input style={inputStyle} value={familyName} onChange={(e) => setFamilyName(e.target.value)} placeholder="例如：陳家" /></Field>
       <Field label="備註"><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder="選填" /></Field>
-
-      <div style={{ marginTop: 16, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #EDE6D6" }}>
-        <StoredAccountsEditor family={{ storedAccounts }} onCreate={createAccount} onTopUp={topUpAccount} onDelete={deleteAccount} />
-      </div>
+      <div style={{ fontSize: 12, color: "#9A9284", marginTop: -6, marginBottom: 14 }}>儲值帳戶請至「收費總覽」管理（建立、儲值、刪除），這裡只負責登記成員與課程收費標準。</div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>家庭成員</span>
@@ -994,6 +987,7 @@ function StudioCRM({ onLogout }) {
   const [billingFamilyId, setBillingFamilyId] = useState("");
   const [billingExpandAccounts, setBillingExpandAccounts] = useState(false);
   const [showCreateAccountBilling, setShowCreateAccountBilling] = useState(false);
+  const [billingTopUpFor, setBillingTopUpFor] = useState(null); // { familyId, account }
   const [billingExpandSessions, setBillingExpandSessions] = useState(false);
   const [recordsMonth, setRecordsMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const [recordsShowAll, setRecordsShowAll] = useState(false);
@@ -1164,6 +1158,25 @@ function StudioCRM({ onLogout }) {
       }],
     })));
     return newId;
+  };
+
+  // 為現有儲值帳戶加值（含新增一筆儲值紀錄）
+  const topUpStoredAccount = (familyId, accountId, rec) => {
+    pushHistory();
+    setFamilies((prev) => prev.map((f) => (f.id !== familyId ? f : {
+      ...f,
+      storedAccounts: (f.storedAccounts || []).map((a) => (a.id !== accountId ? a : {
+        ...a,
+        remainingUnits: (a.remainingUnits ?? 0) + (rec.units || 0),
+        topUps: [...(a.topUps || []), rec],
+      })),
+    })));
+  };
+
+  // 刪除儲值帳戶（若尚有剩餘堂數，呼叫端應先向使用者確認）
+  const deleteStoredAccount = (familyId, accountId) => {
+    pushHistory();
+    setFamilies((prev) => prev.map((f) => (f.id !== familyId ? f : { ...f, storedAccounts: (f.storedAccounts || []).filter((a) => a.id !== accountId) })));
   };
 
   /* ---------- 家庭 CRUD ---------- */
@@ -2169,7 +2182,19 @@ function StudioCRM({ onLogout }) {
                             });
                             return (
                             <div key={acc.id} style={{ marginBottom: 18 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>單堂 {money(acc.pricePerUnit)}｜剩餘 {acc.remainingUnits ?? 0} 堂</div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700 }}>單堂 {money(acc.pricePerUnit)}｜剩餘 {acc.remainingUnits ?? 0} 堂</div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button style={{ ...btnGhost, ...btnSm }} onClick={() => setBillingTopUpFor({ familyId: fam.id, account: acc })}><Wallet size={12} />儲值</button>
+                                  <button
+                                    style={{ ...btnDanger, ...btnSm }}
+                                    onClick={() => {
+                                      if ((acc.remainingUnits ?? 0) > 0 && !window.confirm(`此帳戶還有剩餘 ${acc.remainingUnits} 堂尚未使用，確定要刪除嗎？刪除後無法復原。`)) return;
+                                      deleteStoredAccount(fam.id, acc.id);
+                                    }}
+                                  ><Trash2 size={12} /></button>
+                                </div>
+                              </div>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <div>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: "#2F7A3B", marginBottom: 6 }}>儲值紀錄</div>
@@ -2707,6 +2732,16 @@ function StudioCRM({ onLogout }) {
       {paymentEdit && (
         <Modal title="編輯繳費資訊" onClose={() => setPaymentEdit(null)}>
           <PaymentDetailForm attendee={paymentEdit.attendee} onCancel={() => setPaymentEdit(null)} onSave={(patch) => { updateAttendeePayment(paymentEdit.session, paymentEdit.attendee.id, patch); setPaymentEdit(null); }} />
+        </Modal>
+      )}
+
+      {billingTopUpFor && (
+        <Modal title="儲值" onClose={() => setBillingTopUpFor(null)}>
+          <TopUpForm
+            account={billingTopUpFor.account}
+            onCancel={() => setBillingTopUpFor(null)}
+            onAdd={(rec) => { topUpStoredAccount(billingTopUpFor.familyId, billingTopUpFor.account.id, rec); setBillingTopUpFor(null); }}
+          />
         </Modal>
       )}
 
