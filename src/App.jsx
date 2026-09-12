@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
+import { supabase } from "./supabaseClient";
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, X, Trash2, Users, DollarSign,
-  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy, ChevronDown, ChevronUp, CalendarDays
+  Clock, AlertCircle, RefreshCw, Edit3, Save, UserPlus, Repeat, AlertTriangle, Wallet, Undo2, LogOut, Printer, FileSpreadsheet, CalendarOff, ArrowUp, Search, UserX, UserCheck, MessageSquare, Copy, ChevronDown, ChevronUp, CalendarDays
 } from "lucide-react";
 
 /* =========================================================
@@ -907,7 +908,72 @@ function RecurringTemplateForm({ initial, families, onSave, onCancel }) {
 /* =========================================================
    主應用
 ========================================================= */
-export default function StudioCRM() {
+/* =========================================================
+   登入畫面
+========================================================= */
+function LoginScreen({ onLoggedIn }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (err) { setError("帳號或密碼錯誤，請再試一次"); return; }
+    onLoggedIn();
+  };
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", background: "#FBF8F1", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <form onSubmit={submit} style={{ background: "#fff", borderRadius: 16, border: "1px solid #EDE6D6", padding: 32, width: "100%", maxWidth: 380, boxShadow: "0 12px 32px rgba(0,0,0,0.06)" }}>
+        <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#2E2A22" }}>圈戲創作工作室課程及個案管理系統</h1>
+        <div style={{ fontSize: 13, color: "#9A9284", marginBottom: 24 }}>請登入以繼續</div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#5C5648", marginBottom: 6 }}>帳號（Email）</label>
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#5C5648", marginBottom: 6 }}>密碼</label>
+          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        {error && <div style={{ background: "#FDECEC", color: "#B4302A", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{error}</div>}
+        <button type="submit" disabled={loading}
+          style={{ width: "100%", border: "none", borderRadius: 9, padding: "11px 16px", fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer", background: "#B4694A", color: "#fff", opacity: loading ? 0.7 : 1 }}>
+          {loading ? "登入中…" : "登入"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* =========================================================
+   最外層：登入驗證
+========================================================= */
+export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = 檢查中, null = 未登入, object = 已登入
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return <div style={{ fontFamily: "'Noto Sans TC', system-ui, sans-serif", padding: 40, color: "#9A9284" }}>載入中…</div>;
+  }
+  if (!session) {
+    return <LoginScreen onLoggedIn={() => {}} />;
+  }
+  return <StudioCRM onLogout={() => supabase.auth.signOut()} />;
+}
+
+function StudioCRM({ onLogout }) {
   const [families, setFamilies] = useState([]);
   const [slots, setSlots] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -1027,33 +1093,33 @@ export default function StudioCRM() {
     return [...existing, ...seed.filter((t) => !ids.has(t.id))];
   };
 
-  useEffect(() => {
-    (async () => {
-      let loadedFamilies = [];
-      let loadedTemplates = [];
-      try {
-        const res = await window.storage.get(STORAGE_KEY, false);
-        if (res && res.value) {
-          const data = JSON.parse(res.value);
-          loadedFamilies = data.families || [];
-          loadedTemplates = data.templates || [];
-          setSlots(data.slots || []);
-          setVacations(data.vacations || []);
-          setStaffList(data.staffList || []);
-          setDuties(data.duties || {});
-          setIrregularStudents(data.irregularStudents || []);
-        }
-      } catch (e) { /* 尚無資料 */ }
+  const loadFromServer = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from("studio_data").select("value").eq("id", "main").maybeSingle();
+      if (error) throw error;
+      const loadedFamilies = data?.value?.families || [];
+      const loadedTemplates = data?.value?.templates || [];
       setFamilies(loadedFamilies); // 種子資料自動合併已關閉，避免覆蓋或還原使用者刪除過的資料
       setTemplates(loadedTemplates); // 種子資料自動合併已關閉，避免覆蓋或還原使用者刪除過的資料
-      setLoaded(true);
-    })();
+      setSlots(data?.value?.slots || []);
+      setVacations(data?.value?.vacations || []);
+      setStaffList(data?.value?.staffList || []);
+      setDuties(data?.value?.duties || {});
+      setIrregularStudents(data?.value?.irregularStudents || []);
+      setSaveError("");
+    } catch (e) {
+      setSaveError("讀取資料失敗，請確認網路連線與資料庫設定");
+    }
   }, []);
+
+  useEffect(() => {
+    (async () => { await loadFromServer(); setLoaded(true); })();
+  }, [loadFromServer]);
 
   const persist = useCallback(async (f, s, t, v, st, du, irr) => {
     try {
-      const ok = await window.storage.set(STORAGE_KEY, JSON.stringify({ families: f, slots: s, templates: t, vacations: v, staffList: st, duties: du, irregularStudents: irr }), false);
-      setSaveError(ok ? "" : "儲存失敗，請稍後再試");
+      const { error } = await supabase.from("studio_data").upsert({ id: "main", value: { families: f, slots: s, templates: t, vacations: v, staffList: st, duties: du, irregularStudents: irr }, updated_at: new Date().toISOString() });
+      setSaveError(error ? "儲存失敗，請稍後再試" : "");
     } catch (e) { setSaveError("儲存失敗，請稍後再試"); }
   }, []);
   useEffect(() => { if (loaded) persist(families, slots, templates, vacations, staffList, duties, irregularStudents); }, [families, slots, templates, vacations, staffList, duties, irregularStudents, loaded]); // eslint-disable-line
@@ -1708,6 +1774,9 @@ export default function StudioCRM() {
             <div style={{ fontSize: 13, color: "#9A9284", marginTop: 2 }}>家庭・固定課程・排課・收費一站管理</div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button style={btnGhost} onClick={loadFromServer} title="從資料庫重新讀取最新資料（其他電腦的更新）">
+              <RefreshCw size={15} />同步最新資料
+            </button>
             <button
               onClick={undo}
               disabled={history.length === 0}
@@ -1721,6 +1790,9 @@ export default function StudioCRM() {
                 <button key={key} onClick={() => setTab(key)} style={{ ...btnBase, background: tab === key ? "#B4694A" : "transparent", color: tab === key ? "#fff" : "#5C5648" }}><Icon size={15} />{label}</button>
               ))}
             </div>
+            <button style={btnDanger} onClick={onLogout} title="登出">
+              <LogOut size={15} />登出
+            </button>
           </div>
         </div>
 
