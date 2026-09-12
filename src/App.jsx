@@ -1560,9 +1560,7 @@ function StudioCRM({ onLogout }) {
       entries.sort((a, b) => a.startTime.localeCompare(b.startTime));
       const text = entries.length === 1
         ? `小提醒，${relLabel}${dayLabel}${entries[0].startTime}-${entries[0].endTime} 有一堂${entries[0].name}的${entries[0].courseType}喔！`
-        : `小提醒，${relLabel}${dayLabel}有以下課程喔：
-` + entries.map((e) => `${e.startTime}-${e.endTime}　${e.name}．${e.courseType}`).join("
-");
+        : `小提醒，${relLabel}${dayLabel}有以下課程喔：\n` + entries.map((e) => `${e.startTime}-${e.endTime}　${e.name}．${e.courseType}`).join("\n");
       lines.push({ id: familyId, text, sortKey: entries[0].startTime });
     });
     return lines.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
