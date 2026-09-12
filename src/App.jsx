@@ -2550,7 +2550,82 @@ function StudioCRM({ onLogout }) {
           </div>
         )}
 
-        {/* ---------------- 每月課程表通知訊息生成器 ---------------- */}
+        {/* ---------------- 每日上課提醒生成器 ---------------- */}
+        {tab === "notify" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20, marginTop: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>每日上課提醒生成器</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇日期，列出當天每一堂課的提醒訊息，每堂課獨立一則，方便分別傳給不同家長。</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 200px" }}>
+                <Field label="通知日期">
+                  <input type="date" style={inputStyle} value={dailyReminderDate} onChange={(e) => { setDailyReminderDate(e.target.value); setDailyReminderCopiedId(null); }} />
+                </Field>
+              </div>
+            </div>
+
+            {(() => {
+              const lines = buildDailyClassReminders(dailyReminderDate);
+              if (lines.length === 0) {
+                return <div style={{ fontSize: 13, color: "#9A9284" }}>這天沒有排課紀錄。</div>;
+              }
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {lines.map((l) => (
+                    <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, border: "1px solid #EDE6D6", borderRadius: 9, padding: "10px 12px", background: "#FBF8F1" }}>
+                      <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-line" }}>{l.text}</div>
+                      <button
+                        style={{ ...btnGhost, flexShrink: 0 }}
+                        onClick={() => { navigator.clipboard.writeText(l.text); setDailyReminderCopiedId(l.id); setTimeout(() => setDailyReminderCopiedId((cur) => (cur === l.id ? null : cur)), 2000); }}
+                      >
+                        <Copy size={14} />{dailyReminderCopiedId === l.id ? "已複製！" : "複製"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {tab === "notify" && (
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20, marginTop: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>繳費提醒生成器</div>
+            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇家庭，自動整理出所有尚未繳費的課程金額，並附上匯款資訊，方便複製貼給家長。</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 240px" }}>
+                <Field label="選擇家庭">
+                  <select style={inputStyle} value={reminderFamilyId} onChange={(e) => { setReminderFamilyId(e.target.value); setReminderCopied(false); }}>
+                    <option value="">請選擇家庭</option>
+                    {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
+                  </select>
+                </Field>
+              </div>
+            </div>
+
+            {(() => {
+              const reminderMessage = buildFamilyPaymentReminder();
+              return (
+                <>
+                  <textarea
+                    readOnly
+                    value={reminderMessage || (reminderFamilyId ? "這個家庭目前沒有未繳費的課程。" : "請先選擇家庭。")}
+                    style={{ width: "100%", minHeight: 260, boxSizing: "border-box", padding: 12, borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, lineHeight: 1.6, fontFamily: "inherit", resize: "vertical", background: "#FBF8F1", color: "#2E2A22" }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                    <button
+                      style={btnPrimary}
+                      disabled={!reminderMessage}
+                      onClick={() => { navigator.clipboard.writeText(reminderMessage); setReminderCopied(true); setTimeout(() => setReminderCopied(false), 2000); }}
+                    >
+                      <Copy size={14} />{reminderCopied ? "已複製！" : "複製訊息"}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
         {tab === "notify" && (
           <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>每月課程表通知訊息生成器</div>
@@ -2604,81 +2679,6 @@ function StudioCRM({ onLogout }) {
                     </button>
                   </div>
                 </>
-              );
-            })()}
-          </div>
-        )}
-
-        {tab === "notify" && (
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20, marginTop: 18 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>繳費提醒生成器</div>
-            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇家庭，自動整理出所有尚未繳費的課程金額，並附上匯款資訊，方便複製貼給家長。</div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <div style={{ flex: "1 1 240px" }}>
-                <Field label="選擇家庭">
-                  <select style={inputStyle} value={reminderFamilyId} onChange={(e) => { setReminderFamilyId(e.target.value); setReminderCopied(false); }}>
-                    <option value="">請選擇家庭</option>
-                    {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
-                  </select>
-                </Field>
-              </div>
-            </div>
-
-            {(() => {
-              const reminderMessage = buildFamilyPaymentReminder();
-              return (
-                <>
-                  <textarea
-                    readOnly
-                    value={reminderMessage || (reminderFamilyId ? "這個家庭目前沒有未繳費的課程。" : "請先選擇家庭。")}
-                    style={{ width: "100%", minHeight: 260, boxSizing: "border-box", padding: 12, borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, lineHeight: 1.6, fontFamily: "inherit", resize: "vertical", background: "#FBF8F1", color: "#2E2A22" }}
-                  />
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-                    <button
-                      style={btnPrimary}
-                      disabled={!reminderMessage}
-                      onClick={() => { navigator.clipboard.writeText(reminderMessage); setReminderCopied(true); setTimeout(() => setReminderCopied(false), 2000); }}
-                    >
-                      <Copy size={14} />{reminderCopied ? "已複製！" : "複製訊息"}
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        )}
-
-        {tab === "notify" && (
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 20, marginTop: 18 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>每日上課提醒生成器</div>
-            <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 18 }}>選擇日期，列出當天每一堂課的提醒訊息，每堂課獨立一則，方便分別傳給不同家長。</div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <div style={{ flex: "1 1 200px" }}>
-                <Field label="通知日期">
-                  <input type="date" style={inputStyle} value={dailyReminderDate} onChange={(e) => { setDailyReminderDate(e.target.value); setDailyReminderCopiedId(null); }} />
-                </Field>
-              </div>
-            </div>
-
-            {(() => {
-              const lines = buildDailyClassReminders(dailyReminderDate);
-              if (lines.length === 0) {
-                return <div style={{ fontSize: 13, color: "#9A9284" }}>這天沒有排課紀錄。</div>;
-              }
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {lines.map((l) => (
-                    <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, border: "1px solid #EDE6D6", borderRadius: 9, padding: "10px 12px", background: "#FBF8F1" }}>
-                      <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-line" }}>{l.text}</div>
-                      <button
-                        style={{ ...btnGhost, flexShrink: 0 }}
-                        onClick={() => { navigator.clipboard.writeText(l.text); setDailyReminderCopiedId(l.id); setTimeout(() => setDailyReminderCopiedId((cur) => (cur === l.id ? null : cur)), 2000); }}
-                      >
-                        <Copy size={14} />{dailyReminderCopiedId === l.id ? "已複製！" : "複製"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
               );
             })()}
           </div>
