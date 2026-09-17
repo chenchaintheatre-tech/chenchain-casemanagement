@@ -1982,7 +1982,7 @@ function StudioCRM({ onLogout }) {
     ]);
   };
 
-  const tabList = [["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet], ["notify", "通知訊息", MessageSquare], ["irregular", "不定期學生統計", CalendarDays], ["tasks", "交辦事項", ClipboardList]];
+  const tabList = [["tasks", "交辦事項", ClipboardList], ["calendar", "月曆排課", Calendar], ["recurring", "固定課程", Repeat], ["families", "家庭與學生", Users], ["suspended", "已停課名單", UserX], ["billing", "收費總覽", DollarSign], ["reports", "報表", FileSpreadsheet], ["notify", "通知訊息", MessageSquare], ["irregular", "不定期學生統計", CalendarDays]];
 
   return (
     <>
