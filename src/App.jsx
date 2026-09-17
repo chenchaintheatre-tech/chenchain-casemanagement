@@ -122,6 +122,35 @@ function Field({ label, children }) {
     </div>
   );
 }
+// 可搜尋的姓名選擇器：手動輸入文字篩選 + 下拉選單並行（HTML5 datalist）
+function StudentPicker({ options, value, onChange, placeholder, style }) {
+  const listId = useRef(`sp-${uid()}`).current;
+  const selected = options.find((o) => o.key === value);
+  const [text, setText] = useState(selected ? selected.label : "");
+  useEffect(() => {
+    const sel = options.find((o) => o.key === value);
+    setText(sel ? sel.label : "");
+  }, [value]); // eslint-disable-line
+  return (
+    <>
+      <input
+        style={{ ...inputStyle, ...style }}
+        list={listId}
+        value={text}
+        placeholder={placeholder || "輸入姓名搜尋，或從下拉選單挑選"}
+        onChange={(e) => {
+          const t = e.target.value;
+          setText(t);
+          const match = options.find((o) => o.label === t);
+          onChange(match ? match.key : "");
+        }}
+      />
+      <datalist id={listId}>
+        {options.map((o) => <option key={o.key} value={o.label} />)}
+      </datalist>
+    </>
+  );
+}
 const inputStyle = { width: "100%", padding: "9px 11px", borderRadius: 9, border: "1px solid #DED5BF", fontSize: 14, boxSizing: "border-box", background: "#fff", color: "#2E2A22" };
 const btnBase = { border: "none", borderRadius: 9, padding: "9px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 };
 const btnPrimary = { ...btnBase, background: "#B4694A", color: "#fff" };
@@ -543,20 +572,17 @@ function AddAttendeeForm({ session, families, onAdd, onCancel, onCreateAccount }
 
   return (
     <div>
-      <Field label="家庭 *">
-        <select style={inputStyle} value={familyId} onChange={(e) => { setFamilyId(e.target.value); setMemberId(""); setPlanId(""); setStoredAccountId(""); }}>
-          <option value="">請選擇家庭</option>
-          {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
-        </select>
+      <Field label="學生 *">
+        <StudentPicker
+          options={families.flatMap((f) => f.members.map((m) => ({ key: `${f.id}::${m.id}`, label: `${f.familyName}・${m.name}（${m.relation}）` })))}
+          value={familyId && memberId ? `${familyId}::${memberId}` : ""}
+          onChange={(key) => {
+            const [fid, mid] = key ? key.split("::") : ["", ""];
+            setFamilyId(fid); setMemberId(mid); setPlanId(""); setStoredAccountId("");
+          }}
+          placeholder="輸入家庭或學生姓名搜尋"
+        />
       </Field>
-      {family && (
-        <Field label="成員 *">
-          <select style={inputStyle} value={memberId} onChange={(e) => { setMemberId(e.target.value); setPlanId(""); }}>
-            <option value="">請選擇成員</option>
-            {members.map((m) => <option key={m.id} value={m.id}>{m.name}（{m.relation}）</option>)}
-          </select>
-        </Field>
-      )}
       {member && (
         <Field label="課程方案（用於帶入費用）">
           <select style={inputStyle} value={planId} onChange={(e) => setPlanId(e.target.value)}>
@@ -922,14 +948,17 @@ function RecurringAttendeeRow({ row, families, onChange, onRemove }) {
   const member = members.find((m) => m.id === row.memberId);
   return (
     <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-      <select style={{ ...inputStyle, flex: 1 }} value={row.familyId} onChange={(e) => onChange({ ...row, familyId: e.target.value, memberId: "", planId: "" })}>
-        <option value="">選擇家庭</option>
-        {families.map((f) => <option key={f.id} value={f.id}>{f.familyName}</option>)}
-      </select>
-      <select style={{ ...inputStyle, flex: 1 }} value={row.memberId} onChange={(e) => onChange({ ...row, memberId: e.target.value, planId: "" })} disabled={!family}>
-        <option value="">選擇成員</option>
-        {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-      </select>
+      <div style={{ flex: 2 }}>
+        <StudentPicker
+          options={families.flatMap((f) => f.members.map((m) => ({ key: `${f.id}::${m.id}`, label: `${f.familyName}・${m.name}` })))}
+          value={row.familyId && row.memberId ? `${row.familyId}::${row.memberId}` : ""}
+          onChange={(key) => {
+            const [fid, mid] = key ? key.split("::") : ["", ""];
+            onChange({ ...row, familyId: fid, memberId: mid, planId: "" });
+          }}
+          placeholder="輸入家庭或學生姓名搜尋"
+        />
+      </div>
       <select style={{ ...inputStyle, flex: 1 }} value={row.planId} onChange={(e) => onChange({ ...row, planId: e.target.value })} disabled={!member}>
         <option value="">課程方案（選填）</option>
         {member?.plans.map((p) => <option key={p.id} value={p.id}>{p.courseType}</option>)}
@@ -2742,12 +2771,12 @@ function StudioCRM({ onLogout }) {
               <div style={{ border: "1px solid #EDE6D6", borderRadius: 12, padding: 16 }}>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>個別學生課程明細</div>
                 <Field label="選擇學生">
-                  <select style={inputStyle} value={reportStudentKey} onChange={(e) => setReportStudentKey(e.target.value)}>
-                    <option value="">請選擇學生</option>
-                    {families.flatMap((f) => f.members.map((m) => (
-                      <option key={`${f.id}::${m.id}`} value={`${f.id}::${m.id}`}>{f.familyName}・{m.name}</option>
-                    )))}
-                  </select>
+                  <StudentPicker
+                    options={families.flatMap((f) => f.members.map((m) => ({ key: `${f.id}::${m.id}`, label: `${f.familyName}・${m.name}` })))}
+                    value={reportStudentKey}
+                    onChange={setReportStudentKey}
+                    placeholder="輸入家庭或學生姓名搜尋"
+                  />
                 </Field>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={{ ...btnPrimary, flex: 1, justifyContent: "center" }} onClick={exportStudentDetail} disabled={!reportStudentKey}><FileSpreadsheet size={14} />匯出 Excel</button>
@@ -2929,12 +2958,14 @@ function StudioCRM({ onLogout }) {
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>不定期學生名單</div>
                 <div style={{ fontSize: 12, color: "#9A9284", marginBottom: 14 }}>新增沒有固定排課週期的學生，並指定歸屬平日或假日時段；下方會自動統計他們過去在月曆上的實際上課紀錄。</div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                  <select style={{ ...inputStyle, maxWidth: 280 }} value={irregularAddKey} onChange={(e) => setIrregularAddKey(e.target.value)}>
-                    <option value="">請選擇學生</option>
-                    {families.flatMap((f) => f.members.filter((m) => !trackedKeys.has(`${f.id}::${m.id}`)).map((m) => (
-                      <option key={`${f.id}::${m.id}`} value={`${f.id}::${m.id}`}>{f.familyName}・{m.name}</option>
-                    )))}
-                  </select>
+                  <div style={{ maxWidth: 280, flex: "1 1 280px" }}>
+                    <StudentPicker
+                      options={families.flatMap((f) => f.members.filter((m) => !trackedKeys.has(`${f.id}::${m.id}`)).map((m) => ({ key: `${f.id}::${m.id}`, label: `${f.familyName}・${m.name}` })))}
+                      value={irregularAddKey}
+                      onChange={setIrregularAddKey}
+                      placeholder="輸入家庭或學生姓名搜尋"
+                    />
+                  </div>
                   <select style={{ ...inputStyle, maxWidth: 140 }} value={irregularAddCategory} onChange={(e) => setIrregularAddCategory(e.target.value)}>
                     <option value="weekday">平日時段</option>
                     <option value="weekend">假日時段</option>
