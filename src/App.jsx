@@ -687,29 +687,37 @@ function TaskEditForm({ task, staffList, onSave, onCancel }) {
 /* =========================================================
    交辦事項卡片（含回覆進度）
 ========================================================= */
-function TaskCard({ task, staffList, overdue, staffName, onToggleDone, onDelete, onEdit, onMoveToAnnouncement, onAddReply }) {
+function TaskCard({ task, staffList, overdue, staffName, onToggleDone, onDelete, onEdit, onMoveToAnnouncement, onAddReply, onUpdateReply }) {
   const [replyStaffId, setReplyStaffId] = useState("");
   const [replyContent, setReplyContent] = useState("");
+  const [editingReplyId, setEditingReplyId] = useState(null);
+  const [editReplyContent, setEditReplyContent] = useState("");
 
   const submitReply = () => {
     if (!replyStaffId || !replyContent.trim()) return;
     onAddReply(task.id, { staffId: replyStaffId, content: replyContent.trim() });
     setReplyContent("");
   };
+  const startEditReply = (r) => { setEditingReplyId(r.id); setEditReplyContent(r.content); };
+  const saveEditReply = () => {
+    if (!editReplyContent.trim()) return;
+    onUpdateReply(task.id, editingReplyId, { content: editReplyContent.trim() });
+    setEditingReplyId(null);
+  };
 
   return (
     <div style={{ border: `1px solid ${overdue ? "#E8AFA8" : "#EDE6D6"}`, background: task.done ? "#F7F5EF" : overdue ? "#FDECEC" : "#FBF8F1", borderRadius: 10, padding: 12 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-        {(task.targetIds || []).map((id) => (
-          <span key={id} style={{ fontSize: 12, fontWeight: 700, background: "#5C4A3A", color: "#fff", padding: "3px 10px", borderRadius: 99 }}>
-            <UserCheck size={11} style={{ verticalAlign: -1, marginRight: 3 }} />{staffName(id)}
-          </span>
-        ))}
         {task.dueDate && (
           <span style={{ fontSize: 12, fontWeight: 700, background: overdue && !task.done ? "#B4302A" : "#B4694A", color: "#fff", padding: "3px 10px", borderRadius: 99 }}>
             <Clock size={11} style={{ verticalAlign: -1, marginRight: 3 }} />{task.dueDate}{overdue && !task.done ? "（已逾期）" : ""}
           </span>
         )}
+        {(task.targetIds || []).map((id) => (
+          <span key={id} style={{ fontSize: 12, fontWeight: 700, background: "#5C4A3A", color: "#fff", padding: "3px 10px", borderRadius: 99 }}>
+            <UserCheck size={11} style={{ verticalAlign: -1, marginRight: 3 }} />{staffName(id)}
+          </span>
+        ))}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ fontSize: 13, lineHeight: 1.6, color: task.done ? "#8A8272" : "#2E2A22", textDecoration: task.done ? "line-through" : "none" }}>{task.content}</div>
@@ -729,7 +737,19 @@ function TaskCard({ task, staffList, overdue, staffName, onToggleDone, onDelete,
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #EDE6D6", display: "flex", flexDirection: "column", gap: 6 }}>
           {task.replies.map((r) => (
             <div key={r.id} style={{ fontSize: 12, color: "#5C5648" }}>
-              <span style={{ fontWeight: 700 }}>{staffName(r.staffId)}</span>　{r.content}　<span style={{ color: "#B7B0A0" }}>（{r.date}）</span>
+              {editingReplyId === r.id ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 700 }}>{staffName(r.staffId)}</span>
+                  <input style={{ ...inputStyle, flex: "1 1 160px", padding: "4px 8px", fontSize: 12 }} value={editReplyContent} onChange={(e) => setEditReplyContent(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveEditReply(); }} />
+                  <button style={{ ...btnGhost, ...btnSm }} onClick={saveEditReply}><Save size={11} /></button>
+                  <button style={{ ...btnGhost, ...btnSm }} onClick={() => setEditingReplyId(null)}>取消</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                  <div><span style={{ fontWeight: 700 }}>{staffName(r.staffId)}</span>　{r.content}　<span style={{ color: "#B7B0A0" }}>（{r.date}）</span></div>
+                  <button onClick={() => startEditReply(r)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#8A8272", display: "flex", flexShrink: 0 }}><Edit3 size={11} /></button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -750,16 +770,37 @@ function TaskCard({ task, staffList, overdue, staffName, onToggleDone, onDelete,
 /* =========================================================
    公告卡片（含已讀標記）
 ========================================================= */
-function AnnouncementCard({ announcement, staffList, staffName, onDelete, onMarkRead }) {
+function AnnouncementCard({ announcement, staffList, staffName, onDelete, onMarkRead, onUpdate }) {
   const [readStaffId, setReadStaffId] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(announcement.content);
   const readBy = announcement.readBy || [];
+
+  const saveEdit = () => {
+    if (!editContent.trim()) return;
+    onUpdate(announcement.id, { content: editContent.trim() });
+    setIsEditing(false);
+  };
 
   return (
     <div style={{ border: "1px solid #EDE6D6", background: "#FBF8F1", borderRadius: 10, padding: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{announcement.content}</div>
-        <button style={{ ...btnDanger, ...btnSm, flexShrink: 0 }} onClick={() => onDelete(announcement.id)}><Trash2 size={12} /></button>
-      </div>
+      {isEditing ? (
+        <div>
+          <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={editContent} onChange={(e) => setEditContent(e.target.value)} />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
+            <button style={{ ...btnGhost, ...btnSm }} onClick={() => { setIsEditing(false); setEditContent(announcement.content); }}>取消</button>
+            <button style={{ ...btnPrimary, ...btnSm }} onClick={saveEdit}><Save size={12} />儲存</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ fontSize: 13, lineHeight: 1.6 }}>{announcement.content}</div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button style={{ ...btnGhost, ...btnSm }} onClick={() => setIsEditing(true)}><Edit3 size={12} />編輯</button>
+            <button style={{ ...btnDanger, ...btnSm }} onClick={() => onDelete(announcement.id)}><Trash2 size={12} /></button>
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 8 }}>
         {announcement.date}{announcement.authorId ? `｜${staffName(announcement.authorId)}` : ""}
         {readBy.length > 0 && `｜已讀（${readBy.length}）：${readBy.map(staffName).join("、")}`}
@@ -1576,6 +1617,11 @@ function StudioCRM({ onLogout }) {
   const markAnnouncementRead = (annId, staffId) => {
     pushHistory();
     setAnnouncements((prev) => prev.map((a) => (a.id === annId ? { ...a, readBy: (a.readBy || []).includes(staffId) ? a.readBy : [...(a.readBy || []), staffId] } : a)));
+  };
+  const updateAnnouncement = (id, patch) => { pushHistory(); setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a))); };
+  const updateTaskReply = (taskId, replyId, patch) => {
+    pushHistory();
+    setTasks((prev) => prev.map((t) => (t.id !== taskId ? t : { ...t, replies: (t.replies || []).map((r) => (r.id === replyId ? { ...r, ...patch } : r)) })));
   };
 
   // 不定期學生統計：取得從指定月份起算連續6個月
@@ -3004,7 +3050,7 @@ function StudioCRM({ onLogout }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {announcements.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>目前沒有公告。</div>}
                   {announcements.map((a) => (
-                    <AnnouncementCard key={a.id} announcement={a} staffList={staffList} staffName={staffName} onDelete={deleteAnnouncement} onMarkRead={markAnnouncementRead} />
+                    <AnnouncementCard key={a.id} announcement={a} staffList={staffList} staffName={staffName} onDelete={deleteAnnouncement} onMarkRead={markAnnouncementRead} onUpdate={updateAnnouncement} />
                   ))}
                 </div>
               </div>
@@ -3066,7 +3112,7 @@ function StudioCRM({ onLogout }) {
                       key={t.id} task={t} staffList={staffList} staffName={staffName}
                       overdue={!!(t.dueDate && t.dueDate < todayStr())}
                       onToggleDone={toggleTaskDone} onDelete={deleteTask} onEdit={setTaskEditTarget}
-                      onMoveToAnnouncement={moveTaskToAnnouncement} onAddReply={addTaskReply}
+                      onMoveToAnnouncement={moveTaskToAnnouncement} onAddReply={addTaskReply} onUpdateReply={updateTaskReply}
                     />
                   ))}
                 </div>
@@ -3085,7 +3131,7 @@ function StudioCRM({ onLogout }) {
                         key={t.id} task={t} staffList={staffList} staffName={staffName}
                         overdue={false}
                         onToggleDone={toggleTaskDone} onDelete={deleteTask} onEdit={setTaskEditTarget}
-                        onMoveToAnnouncement={moveTaskToAnnouncement} onAddReply={addTaskReply}
+                        onMoveToAnnouncement={moveTaskToAnnouncement} onAddReply={addTaskReply} onUpdateReply={updateTaskReply}
                       />
                     ))}
                   </div>
