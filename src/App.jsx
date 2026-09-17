@@ -632,6 +632,154 @@ function AddAttendeeForm({ session, families, onAdd, onCancel, onCreateAccount }
 }
 
 /* =========================================================
+   編輯交辦事項
+========================================================= */
+function TaskEditForm({ task, staffList, onSave, onCancel }) {
+  const [authorId, setAuthorId] = useState(task.authorId);
+  const [targetIds, setTargetIds] = useState(task.targetIds || []);
+  const [dueDate, setDueDate] = useState(task.dueDate || "");
+  const [content, setContent] = useState(task.content || "");
+
+  const toggleTarget = (id) => setTargetIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ flex: "1 1 160px" }}>
+          <Field label="撰寫人">
+            <select style={inputStyle} value={authorId} onChange={(e) => setAuthorId(e.target.value)}>
+              <option value="">請選擇</option>
+              {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div style={{ flex: "1 1 160px" }}>
+          <Field label="需要完成的時間">
+            <input type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </Field>
+        </div>
+      </div>
+      <Field label="交班對象（可複選）">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {staffList.map((s) => (
+            <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "6px 10px", borderRadius: 99, background: targetIds.includes(s.id) ? "#B4694A" : "#F2ECDE", color: targetIds.includes(s.id) ? "#fff" : "#5C5648", cursor: "pointer", fontWeight: 600 }}>
+              <input type="checkbox" checked={targetIds.includes(s.id)} onChange={() => toggleTarget(s.id)} style={{ display: "none" }} />
+              {s.name}
+            </label>
+          ))}
+        </div>
+      </Field>
+      <Field label="交辦內容">
+        <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={content} onChange={(e) => setContent(e.target.value)} />
+      </Field>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+        <button style={btnGhost} onClick={onCancel}>取消</button>
+        <button
+          style={btnPrimary}
+          disabled={!authorId || targetIds.length === 0 || !content.trim()}
+          onClick={() => onSave({ authorId, targetIds, dueDate, content: content.trim() })}
+        ><Save size={14} />儲存</button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   交辦事項卡片（含回覆進度）
+========================================================= */
+function TaskCard({ task, staffList, overdue, staffName, onToggleDone, onDelete, onEdit, onMoveToAnnouncement, onAddReply }) {
+  const [replyStaffId, setReplyStaffId] = useState("");
+  const [replyContent, setReplyContent] = useState("");
+
+  const submitReply = () => {
+    if (!replyStaffId || !replyContent.trim()) return;
+    onAddReply(task.id, { staffId: replyStaffId, content: replyContent.trim() });
+    setReplyContent("");
+  };
+
+  return (
+    <div style={{ border: `1px solid ${overdue ? "#E8AFA8" : "#EDE6D6"}`, background: task.done ? "#F7F5EF" : overdue ? "#FDECEC" : "#FBF8F1", borderRadius: 10, padding: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        {(task.targetIds || []).map((id) => (
+          <span key={id} style={{ fontSize: 12, fontWeight: 700, background: "#5C4A3A", color: "#fff", padding: "3px 10px", borderRadius: 99 }}>
+            <UserCheck size={11} style={{ verticalAlign: -1, marginRight: 3 }} />{staffName(id)}
+          </span>
+        ))}
+        {task.dueDate && (
+          <span style={{ fontSize: 12, fontWeight: 700, background: overdue && !task.done ? "#B4302A" : "#B4694A", color: "#fff", padding: "3px 10px", borderRadius: 99 }}>
+            <Clock size={11} style={{ verticalAlign: -1, marginRight: 3 }} />{task.dueDate}{overdue && !task.done ? "（已逾期）" : ""}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ fontSize: 13, lineHeight: 1.6, color: task.done ? "#8A8272" : "#2E2A22", textDecoration: task.done ? "line-through" : "none" }}>{task.content}</div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button style={{ ...btnGhost, ...btnSm }} onClick={() => onEdit(task)}><Edit3 size={12} />編輯</button>
+          {!task.done && <button style={{ ...btnGhost, ...btnSm }} onClick={() => onMoveToAnnouncement(task)}><Megaphone size={12} />移至公告</button>}
+          <button style={{ ...btnGhost, ...btnSm }} onClick={() => onToggleDone(task.id)}>{task.done ? <Undo2 size={12} /> : <Check size={12} />}{task.done ? "取消完成" : "完成"}</button>
+          <button style={{ ...btnDanger, ...btnSm }} onClick={() => onDelete(task.id)}><Trash2 size={12} /></button>
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 8 }}>
+        {task.createdDate} 由 {staffName(task.authorId)} 建立
+        {task.done && task.doneDate && `｜完成於 ${task.doneDate}`}
+      </div>
+
+      {(task.replies || []).length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #EDE6D6", display: "flex", flexDirection: "column", gap: 6 }}>
+          {task.replies.map((r) => (
+            <div key={r.id} style={{ fontSize: 12, color: "#5C5648" }}>
+              <span style={{ fontWeight: 700 }}>{staffName(r.staffId)}</span>　{r.content}　<span style={{ color: "#B7B0A0" }}>（{r.date}）</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select style={{ ...inputStyle, maxWidth: 110, padding: "5px 6px", fontSize: 12 }} value={replyStaffId} onChange={(e) => setReplyStaffId(e.target.value)}>
+          <option value="">回覆者</option>
+          {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <input style={{ ...inputStyle, flex: "1 1 160px", padding: "5px 8px", fontSize: 12 }} value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="回覆處理進度..." onKeyDown={(e) => { if (e.key === "Enter") submitReply(); }} />
+        <button style={{ ...btnGhost, ...btnSm }} onClick={submitReply} disabled={!replyStaffId || !replyContent.trim()}>回覆</button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   公告卡片（含已讀標記）
+========================================================= */
+function AnnouncementCard({ announcement, staffList, staffName, onDelete, onMarkRead }) {
+  const [readStaffId, setReadStaffId] = useState("");
+  const readBy = announcement.readBy || [];
+
+  return (
+    <div style={{ border: "1px solid #EDE6D6", background: "#FBF8F1", borderRadius: 10, padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{announcement.content}</div>
+        <button style={{ ...btnDanger, ...btnSm, flexShrink: 0 }} onClick={() => onDelete(announcement.id)}><Trash2 size={12} /></button>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 8 }}>
+        {announcement.date}{announcement.authorId ? `｜${staffName(announcement.authorId)}` : ""}
+        {readBy.length > 0 && `｜已讀（${readBy.length}）：${readBy.map(staffName).join("、")}`}
+      </div>
+      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select style={{ ...inputStyle, maxWidth: 140, padding: "5px 6px", fontSize: 12 }} value={readStaffId} onChange={(e) => setReadStaffId(e.target.value)}>
+          <option value="">我是⋯</option>
+          {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <button
+          style={{ ...btnGhost, ...btnSm }}
+          onClick={() => { if (readStaffId) { onMarkRead(announcement.id, readStaffId); setReadStaffId(""); } }}
+          disabled={!readStaffId}
+        ><Check size={12} />標記已讀</button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
    建立新的儲值帳戶（含首次儲值）
 ========================================================= */
 function CreateStoredAccountForm({ initialPricePerUnit, onCreate, onCancel, compact }) {
@@ -1006,6 +1154,7 @@ function StudioCRM({ onLogout }) {
   const [tasks, setTasks] = useState([]); // [{id, createdDate, authorId, targetIds:[], dueDate, content, done, doneDate}]
   const [announcements, setAnnouncements] = useState([]); // [{id, date, authorId, content}]
   const [taskCompletedExpanded, setTaskCompletedExpanded] = useState(false);
+  const [taskEditTarget, setTaskEditTarget] = useState(null);
   const [taskAuthor, setTaskAuthor] = useState("");
   const [taskTargets, setTaskTargets] = useState([]);
   const [taskDueDate, setTaskDueDate] = useState("");
@@ -1414,6 +1563,20 @@ function StudioCRM({ onLogout }) {
   // 公告 CRUD
   const addAnnouncement = (ann) => { pushHistory(); setAnnouncements((prev) => [{ id: uid(), ...ann }, ...prev]); };
   const deleteAnnouncement = (id) => { pushHistory(); setAnnouncements((prev) => prev.filter((a) => a.id !== id)); };
+  const updateTask = (id, patch) => { pushHistory(); setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t))); };
+  const moveTaskToAnnouncement = (task) => {
+    pushHistory();
+    setAnnouncements((prev) => [{ id: uid(), date: todayStr(), authorId: task.authorId, content: task.content, readBy: [] }, ...prev]);
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+  };
+  const addTaskReply = (taskId, reply) => {
+    pushHistory();
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, replies: [...(t.replies || []), { id: uid(), date: todayStr(), ...reply }] } : t)));
+  };
+  const markAnnouncementRead = (annId, staffId) => {
+    pushHistory();
+    setAnnouncements((prev) => prev.map((a) => (a.id === annId ? { ...a, readBy: (a.readBy || []).includes(staffId) ? a.readBy : [...(a.readBy || []), staffId] } : a)));
+  };
 
   // 不定期學生統計：取得從指定月份起算連續6個月
   const irregularMonthRange = () => {
@@ -2817,6 +2980,36 @@ function StudioCRM({ onLogout }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
               <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}><Megaphone size={16} style={{ verticalAlign: -3, marginRight: 4 }} />公告區</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                  <div style={{ flex: "1 1 160px" }}>
+                    <Field label="發布人">
+                      <select style={inputStyle} value={announcementAuthor} onChange={(e) => setAnnouncementAuthor(e.target.value)}>
+                        <option value="">請選擇</option>
+                        {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+                <Field label="公告內容">
+                  <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={announcementContent} onChange={(e) => setAnnouncementContent(e.target.value)} placeholder="請輸入公告內容" />
+                </Field>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                  <button
+                    style={btnPrimary}
+                    disabled={!announcementContent.trim()}
+                    onClick={() => { addAnnouncement({ date: todayStr(), authorId: announcementAuthor, content: announcementContent.trim() }); setAnnouncementContent(""); }}
+                  ><Plus size={14} />發布公告</button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {announcements.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>目前沒有公告。</div>}
+                  {announcements.map((a) => (
+                    <AnnouncementCard key={a.id} announcement={a} staffList={staffList} staffName={staffName} onDelete={deleteAnnouncement} onMarkRead={markAnnouncementRead} />
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>新增交辦事項</div>
                 {staffList.length === 0 ? (
                   <div style={{ fontSize: 13, color: "#9A9284" }}>請先到「月曆排課」頁面最下方新增值班人員，才能指定撰寫人與交班對象。</div>
@@ -2868,24 +3061,14 @@ function StudioCRM({ onLogout }) {
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>待辦事項（{pendingTasks.length}）</div>
                 {pendingTasks.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>目前沒有待辦事項。</div>}
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {pendingTasks.map((t) => {
-                    const overdue = t.dueDate && t.dueDate < todayStr();
-                    return (
-                      <div key={t.id} style={{ border: `1px solid ${overdue ? "#E8AFA8" : "#EDE6D6"}`, background: overdue ? "#FDECEC" : "#FBF8F1", borderRadius: 10, padding: 12 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                          <div style={{ fontSize: 13, lineHeight: 1.6 }}>{t.content}</div>
-                          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                            <button style={{ ...btnGhost, ...btnSm }} onClick={() => toggleTaskDone(t.id)}><Check size={12} />完成</button>
-                            <button style={{ ...btnDanger, ...btnSm }} onClick={() => deleteTask(t.id)}><Trash2 size={12} /></button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: overdue ? "#B4302A" : "#8A8272", marginTop: 8, fontWeight: overdue ? 700 : 400 }}>
-                          {t.createdDate} 由 {staffName(t.authorId)} 交辦給 {t.targetIds.map(staffName).join("、")}
-                          {t.dueDate && `｜需完成：${t.dueDate}${overdue ? "（已逾期）" : ""}`}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {pendingTasks.map((t) => (
+                    <TaskCard
+                      key={t.id} task={t} staffList={staffList} staffName={staffName}
+                      overdue={!!(t.dueDate && t.dueDate < todayStr())}
+                      onToggleDone={toggleTaskDone} onDelete={deleteTask} onEdit={setTaskEditTarget}
+                      onMoveToAnnouncement={moveTaskToAnnouncement} onAddReply={addTaskReply}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -2898,57 +3081,15 @@ function StudioCRM({ onLogout }) {
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
                     {doneTasks.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>尚無已完成事項。</div>}
                     {doneTasks.map((t) => (
-                      <div key={t.id} style={{ border: "1px solid #EDE6D6", background: "#F7F5EF", borderRadius: 10, padding: 12 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                          <div style={{ fontSize: 13, lineHeight: 1.6, color: "#8A8272", textDecoration: "line-through" }}>{t.content}</div>
-                          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                            <button style={{ ...btnGhost, ...btnSm }} onClick={() => toggleTaskDone(t.id)}><Undo2 size={12} />取消完成</button>
-                            <button style={{ ...btnDanger, ...btnSm }} onClick={() => deleteTask(t.id)}><Trash2 size={12} /></button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 8 }}>
-                          {t.createdDate} 由 {staffName(t.authorId)} 交辦給 {t.targetIds.map(staffName).join("、")}｜完成於 {t.doneDate}
-                        </div>
-                      </div>
+                      <TaskCard
+                        key={t.id} task={t} staffList={staffList} staffName={staffName}
+                        overdue={false}
+                        onToggleDone={toggleTaskDone} onDelete={deleteTask} onEdit={setTaskEditTarget}
+                        onMoveToAnnouncement={moveTaskToAnnouncement} onAddReply={addTaskReply}
+                      />
                     ))}
                   </div>
                 )}
-              </div>
-
-              <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #EDE6D6", padding: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}><Megaphone size={16} style={{ verticalAlign: -3, marginRight: 4 }} />公告區</div>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-                  <div style={{ flex: "1 1 160px" }}>
-                    <Field label="發布人">
-                      <select style={inputStyle} value={announcementAuthor} onChange={(e) => setAnnouncementAuthor(e.target.value)}>
-                        <option value="">請選擇</option>
-                        {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </Field>
-                  </div>
-                </div>
-                <Field label="公告內容">
-                  <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={announcementContent} onChange={(e) => setAnnouncementContent(e.target.value)} placeholder="請輸入公告內容" />
-                </Field>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-                  <button
-                    style={btnPrimary}
-                    disabled={!announcementContent.trim()}
-                    onClick={() => { addAnnouncement({ date: todayStr(), authorId: announcementAuthor, content: announcementContent.trim() }); setAnnouncementContent(""); }}
-                  ><Plus size={14} />發布公告</button>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {announcements.length === 0 && <div style={{ fontSize: 13, color: "#9A9284" }}>目前沒有公告。</div>}
-                  {announcements.map((a) => (
-                    <div key={a.id} style={{ border: "1px solid #EDE6D6", background: "#FBF8F1", borderRadius: 10, padding: 12 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{a.content}</div>
-                        <button style={{ ...btnDanger, ...btnSm, flexShrink: 0 }} onClick={() => deleteAnnouncement(a.id)}><Trash2 size={12} /></button>
-                      </div>
-                      <div style={{ fontSize: 11.5, color: "#8A8272", marginTop: 8 }}>{a.date}{a.authorId ? `｜${staffName(a.authorId)}` : ""}</div>
-                    </div>
-                  ))}
-                </div>
               </div>
 
             </div>
@@ -2993,6 +3134,17 @@ function StudioCRM({ onLogout }) {
             account={billingTopUpFor.account}
             onCancel={() => setBillingTopUpFor(null)}
             onAdd={(rec) => { topUpStoredAccount(billingTopUpFor.familyId, billingTopUpFor.account.id, rec); setBillingTopUpFor(null); }}
+          />
+        </Modal>
+      )}
+
+      {taskEditTarget && (
+        <Modal title="編輯交辦事項" onClose={() => setTaskEditTarget(null)}>
+          <TaskEditForm
+            task={taskEditTarget}
+            staffList={staffList}
+            onCancel={() => setTaskEditTarget(null)}
+            onSave={(patch) => { updateTask(taskEditTarget.id, patch); setTaskEditTarget(null); }}
           />
         </Modal>
       )}
